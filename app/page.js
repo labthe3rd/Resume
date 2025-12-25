@@ -12,6 +12,7 @@ import Projects from '../components/Projects'
 import Contact from '../components/Contact'
 import Footer from '../components/Footer'
 import Playground from '../components/Playground'
+import Chatbot from '../components/Chatbot'
 
 const Scene3D = dynamic(() => import('../components/Scene3D'), { ssr: false })
 
@@ -114,6 +115,8 @@ export default function Home() {
         <Contact />
         <Footer />
       </main>
+
+      <Chatbot />
     </>
   )
 }

@@ -6,6 +6,7 @@ A modern, interactive portfolio website built with Next.js 14, featuring:
 - ✨ **3D Particle Background** using Three.js
 - 🎯 **Bento Grid Layout** for skills and projects
 - 🎮 **Interactive PLC Playground** demo
+- 🤖 **AI Chatbot with RAG** powered by Google Gemini
 - 📱 **Fully Responsive** design
 - ⚡ **Optimized Performance** for fast loading
 
@@ -16,104 +17,142 @@ A modern, interactive portfolio website built with Next.js 14, featuring:
 - **Animations:** Framer Motion
 - **3D Graphics:** Three.js + React Three Fiber
 - **Icons:** Lucide React
+- **AI/Chat:** Google Gemini API
+- **Vector DB:** Upstash Vector (free tier)
 - **Deployment:** Vercel
 
 ## Getting Started
 
-### Local Development
+### 1. Set Up Upstash Vector (Free)
+
+1. Go to [console.upstash.com](https://console.upstash.com)
+2. Create a free account
+3. Click "Create Database" → Select "Vector"
+4. Name it (e.g., "louis-portfolio-rag")
+5. Select region closest to you
+6. **Important:** Set dimensions to `3072` (required for Gemini embedding model)
+7. Copy the `UPSTASH_VECTOR_REST_URL` and `UPSTASH_VECTOR_REST_TOKEN`
+
+### 2. Environment Variables
+
+Create `.env.local` for local development:
 
 ```bash
-# Install dependencies
-npm install
+cp .env.example .env.local
+```
 
-# Run development server
+Fill in the values:
+```env
+GOOGLE_API_KEY=your_google_gemini_api_key
+UPSTASH_VECTOR_REST_URL=https://your-db.upstash.io
+UPSTASH_VECTOR_REST_TOKEN=your_token_here
+ADMIN_PASSWORD=choose_a_secure_password
+```
+
+### 3. Local Development
+
+```bash
+npm install
 npm run dev
 ```
 
 Open [http://localhost:3000](http://localhost:3000) to view the site.
 
-### Build for Production
+### 4. Deploy to Vercel
 
-```bash
-npm run build
-npm start
-```
+#### Option A: Git Repository (Recommended)
 
-## Deploy to Vercel
-
-### Option 1: Git Repository (Recommended)
-
-1. Push this code to a GitHub/GitLab/Bitbucket repository
+1. Push code to GitHub/GitLab
 2. Go to [vercel.com](https://vercel.com)
-3. Click "New Project"
-4. Import your repository
-5. Vercel will auto-detect Next.js and configure build settings
-6. Click "Deploy"
+3. Import repository
+4. **Add Environment Variables** in project settings:
+   - `GOOGLE_API_KEY`
+   - `UPSTASH_VECTOR_REST_URL`
+   - `UPSTASH_VECTOR_REST_TOKEN`
+   - `ADMIN_PASSWORD`
+5. Deploy
 
-### Option 2: Vercel CLI
+#### Option B: Vercel CLI
 
 ```bash
-# Install Vercel CLI
 npm i -g vercel
-
-# Deploy
 vercel
-
-# Deploy to production
+# Add env vars when prompted or in dashboard
 vercel --prod
 ```
+
+## RAG Admin Panel
+
+Access the admin panel at `/admin` to upload documents:
+
+1. Navigate to `yoursite.com/admin`
+2. Enter your `ADMIN_PASSWORD`
+3. Upload text content about yourself
+4. The chatbot will use this for enhanced responses
+
+**Security Note:** The admin page is protected by password. The URL is not linked anywhere on the site, but for extra security you could:
+- Use a complex password
+- Add rate limiting
+- Implement IP whitelisting via Vercel middleware
+
+### What to Upload
+
+Upload detailed information like:
+- Extended work history details
+- Project deep-dives
+- Technical blog posts
+- Certifications and training
+- Personal interests/hobbies
+- Anything you want the chatbot to know
+
+## API Key Security
+
+Your API keys are **never exposed** to the client:
+
+1. Keys are stored as environment variables
+2. API routes run server-side only
+3. Client only communicates with your own `/api/*` endpoints
+4. Vercel encrypts environment variables at rest
+
+**Never commit `.env.local` to git!**
 
 ## Project Structure
 
 ```
 ├── app/
-│   ├── globals.css      # Global styles & CSS variables
-│   ├── layout.js        # Root layout with metadata
-│   └── page.js          # Main page component
+│   ├── admin/
+│   │   └── page.js          # RAG upload admin panel
+│   ├── api/
+│   │   ├── chat/
+│   │   │   └── route.js     # Chat endpoint with RAG
+│   │   └── admin/
+│   │       └── upload/
+│   │           └── route.js # Document upload endpoint
+│   ├── globals.css
+│   ├── layout.js
+│   └── page.js
 ├── components/
-│   ├── Navigation.js    # Fixed navigation bar
-│   ├── Hero.js          # Hero section with CTA
-│   ├── About.js         # About section with stats
-│   ├── Skills.js        # Bento grid skills display
-│   ├── Experience.js    # Timeline experience section
-│   ├── Projects.js      # Filterable project cards
-│   ├── Playground.js    # Interactive PLC demo
-│   ├── Contact.js       # Contact form & links
-│   ├── Footer.js        # Site footer
-│   └── Scene3D.js       # Three.js background
-├── public/              # Static assets
-├── next.config.js       # Next.js configuration
-└── package.json         # Dependencies
+│   ├── Chatbot.js           # AI chat widget
+│   ├── Navigation.js
+│   ├── Hero.js
+│   ├── About.js
+│   ├── Skills.js
+│   ├── Experience.js
+│   ├── Projects.js
+│   ├── Playground.js
+│   ├── Contact.js
+│   ├── Footer.js
+│   └── Scene3D.js
+├── .env.example
+└── package.json
 ```
 
-## Customization
+## Free Tier Limits
 
-### Colors
-Edit CSS variables in `app/globals.css`:
-
-```css
-:root {
-  --accent-cyan: #00d4ff;
-  --accent-purple: #a855f7;
-  --accent-blue: #3b82f6;
-  --accent-green: #10b981;
-  --accent-orange: #f97316;
-}
-```
-
-### Content
-Update resume data in the respective component files:
-- `components/Skills.js` - Skill categories
-- `components/Experience.js` - Work history
-- `components/Projects.js` - Project portfolio
-
-## Performance
-
-- **Lighthouse Score:** 90+ across all categories
-- **First Contentful Paint:** < 1.5s
-- **3D elements** dynamically loaded
-- **Images** optimized with WebP support
+- **Upstash Vector:** 10,000 vectors, 10,000 queries/day
+- **Google Gemini:** 15 RPM free tier (plenty for portfolio)
+- **Vercel:** 100GB bandwidth, serverless functions included
 
 ## License
 
-MIT License - Feel free to use this as a template for your own portfolio!
+MIT License
