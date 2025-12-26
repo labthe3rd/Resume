@@ -6,6 +6,27 @@ import { useRef } from 'react'
 import { Cpu, Network, Code2, Shield, Bot, Eye } from 'lucide-react'
 
 const skillCategories = [
+    {
+    title: 'Data & Intelligence',
+    icon: Code2,
+    color: '#3b82f6',
+    skills: [
+      'LLM Integrations','Python (Data Analysis)', 'SQL', 'PowerShell', 'Predictive Maintenance', 'Power BI', 'REST APIs','C#', 'C++', 'JavaScript',
+      'VBA', 'AutoLISP', 'Batch', 'Bash', 'Power Automate'
+    ]
+  },
+    {
+    title: 'Digital Transformation & OT',
+    icon: Network,
+    color: '#10b981',
+    skills: [
+      'OPC-UA', 'Ignition Perspective', 'OSIsoft PI',
+      'Network Segmentation', 'PTP/NTP Management', 'IEC 62443 Compliance',
+      'VLANs', 'Firewall Management', 'Claroty CTD',
+      ,'TCP/IP', 'PTP', 'NTP', 'SMNTP', 'RDP',
+      'EIP', 'Canbus', 'VPNs', 'Firewalls', 'Active Directory'
+    ]
+  },
   {
     title: 'Controls Engineering',
     icon: Cpu,
@@ -23,30 +44,14 @@ const skillCategories = [
     color: '#a855f7',
     skills: ['Keyence Vision', 'Cognex Vision', 'OCR Implementation', 'Quality Inspection']
   },
-  {
-    title: 'OT Administration',
-    icon: Network,
-    color: '#10b981',
-    skills: [
-      'TCP/IP', 'PTP', 'NTP', 'SMNTP', 'RDP',
-      'EIP', 'Canbus', 'VPNs', 'Firewalls', 'Active Directory'
-    ]
-  },
+
   {
     title: 'OT Security',
     icon: Shield,
     color: '#f97316',
     skills: ['Claroty', 'Network Segmentation', 'Disaster Recovery', 'Compliance']
   },
-  {
-    title: 'Programming',
-    icon: Code2,
-    color: '#3b82f6',
-    skills: [
-      'Python', 'PowerShell', 'C#', 'C++', 'JavaScript',
-      'VBA', 'AutoLISP', 'Batch', 'Bash', 'Power Automate'
-    ]
-  },
+
   {
     title: 'Robotics & Automation',
     icon: Bot,

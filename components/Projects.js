@@ -3,45 +3,47 @@
 import { motion } from 'framer-motion'
 import { useInView } from 'framer-motion'
 import { useRef, useState } from 'react'
-import { Clock, DollarSign, Shield, Cpu, Bot, Wrench, Zap, Eye } from 'lucide-react'
+import { Clock, DollarSign, Shield, Cpu, Bot, Wrench, Zap, Eye,Castle } from 'lucide-react'
 
 const projectCategories = ['All', 'Kellanova', 'Proficient', 'Altron', 'Freelance']
 
 const projects = [
-  {
-    title: 'PTP Master Clock Recovery',
-    company: 'Kellanova',
-    category: 'Kellanova',
-    icon: Clock,
-    color: '#00d4ff',
-    problem: 'Line was down due to three pieces of equipment presenting position failures commonly seen in mechanical failures.',
-    solution: 'Utilized system I set up in Asset Centre to trace clock being reset at 2am 3rd shift, guiding me to a PLC sending PTP messages over the OT Network becoming the grandmaster.',
-    benefit: 'Prevented additional downtime and setup preventative measures to block PTP across the OT Network. Completed in under a single shift.',
-    tags: ['OT Network', 'PTP', 'Asset Centre', 'Troubleshooting']
-  },
+{
+  title: 'PTP Grandmaster Incident Response',
+  company: 'Kellanova',
+  category: 'Kellanova',
+  icon: Clock,
+  color: '#00d4ff',
+  problem: 'A critical high-speed production line suffered catastrophic "phantom" position failures that mimicked mechanical breakage, threatening $450,000/hr in lost retail output.',
+  solution: 'Performed deep-packet analysis via Asset Centre to isolate a rogue PLC broadcast. Corrected the Best Master Clock Algorithm (BMCA) conflict and engineered network guards to prevent future grandmaster takeovers.',
+  benefit: 'Executed a definitive 8-hour recovery where industry averages for such "ghost" timing errors exceed 48 hours—saving an estimated $5M+ in potential downtime and lost product.',
+  savings: '350,000/hr',
+  tags: ['Precision Time Protocol', 'PTP/BMCA', 'Digital Forensics', 'Network Hardening']
+},
   {
     title: 'OT System Overhaul',
     company: 'Kellanova',
     category: 'Kellanova',
-    icon: Shield,
+    icon: Castle,
     color: '#a855f7',
     problem: 'Several systems for data collection were not functioning upon starting my role. No documentation existed.',
     solution: 'Restored functionality for OPC communication on several servers, created disaster recovery program, engineered solution to track PLC changes, developed automated backup system and created documentation.',
     benefit: 'Plant wide productivity improvements, reduced maintenance time, and restored metrics that were no longer being tracked.',
+    savings: '150,000',
     tags: ['OPC', 'Disaster Recovery', 'Documentation', 'Automation']
   },
-  {
-    title: 'Guard Link Safety System',
-    company: 'Kellanova',
-    category: 'Kellanova',
-    icon: Shield,
-    color: '#10b981',
-    problem: 'Line 7 cutter e-stop was single-channel, allowing undetectable failure and catastrophic injury risk.',
-    solution: 'Designed a Guard Link intelligent safety system upgrade using existing devices and improved fault diagnostics.',
-    benefit: 'Avoided a project quoted at $200,000 by contractors and executed it internally for ~$30,000 saving $170,000.',
-    savings: '$170,000',
-    tags: ['Safety Systems', 'Guard Link', 'Cost Savings']
-  },
+{
+  title: 'Internal Safety System ROI',
+  company: 'Kellanova',
+  category: 'Kellanova',
+  icon: Shield,
+  color: '#10b981',
+  problem: 'Cutting conveyor utilized a high-risk single-channel safety system susceptible to undetected failure.',
+  solution: 'Designed and internally executed a Guard Link intelligent safety upgrade, bypassing the need for high-cost external contractors.',
+  benefit: 'Achieved Category 3/4 safety compliance with an 85% cost reduction compared to external quotes.',
+  savings: '270,000',
+  tags: ['ROI Optimization', 'Guard Link', 'Functional Safety']
+},
   {
     title: 'Touch Panel Test Station',
     company: 'Proficient',
@@ -51,17 +53,19 @@ const projects = [
     problem: 'Customer needed automated testing for electric vehicle touch screen panels.',
     solution: 'Designed electrical schematics and programming for system that interfaced with customer touch screen panels for electric vehicles and verified functionality.',
     benefit: 'Fully automated testing process with comprehensive functionality verification.',
+    savings: '120,000',
     tags: ['EV', 'Touch Panels', 'Testing', 'Automation']
   },
   {
     title: 'Glovebox Latch Rotary System',
     company: 'Proficient',
     category: 'Proficient',
-    icon: Bot,
+    icon: Cpu,
     color: '#3b82f6',
     problem: 'Fully autonomous glovebox latch system was not meeting customer metrics.',
     solution: 'Took ownership of glovebox latch rotary system that ran autonomously. Worked with customers on site to re-program system and find mechanical flaws.',
     benefit: 'Customer met metrics promised for system after reprogramming and mechanical adjustments.',
+    savings: '550,000',
     tags: ['Autonomous', 'Automotive', 'PLC Programming']
   },
   {
@@ -73,6 +77,7 @@ const projects = [
     problem: 'Automotive seat assembly line needed autonomous pushnut installation.',
     solution: 'Designed, programmed and commissioned robotic cell on automotive seat assembly line.',
     benefit: 'Fully autonomous operation with high precision pushnut installation.',
+    savings: '350,000',
     tags: ['Robotics', 'Automotive', 'Assembly Line']
   },
   {
@@ -84,6 +89,7 @@ const projects = [
     problem: 'Semi truck seat frames required autonomous screw assembly.',
     solution: 'Designed, programmed and ran FAT for autonomous screw station that assembled semi seat frames autonomously.',
     benefit: 'Successful FAT completion with fully autonomous operation.',
+    savings: '400,000',
     tags: ['FAT', 'Autonomous', 'Assembly']
   },
   {
@@ -230,7 +236,7 @@ export default function Projects() {
                     fontWeight: 600
                   }}>
                     <DollarSign size={14} />
-                    {project.savings} Saved
+                    {project.savings} Impact
                   </div>
                 )}
               </div>

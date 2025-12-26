@@ -6,8 +6,44 @@ import { useRef, useState, useEffect } from 'react'
 import { Play, Pause, RotateCcw, Activity, Cpu, Gauge, Thermometer, Zap } from 'lucide-react'
 
 const generateRandomValue = (min, max) => Math.floor(Math.random() * (max - min + 1)) + min
+const IDEAL_RUN_RATE = 100; // The maximum speed the machine is designed for
+const TARGET_AVAILABILITY = 0.98; // 98% uptime
+const TARGET_QUALITY = 0.99; // 99% good product yield
+
+const calculateValueFromAngle = (centerX, centerY, mouseX, mouseY, currentVal) => {
+  // 1. Get raw angle (-180 to 180)
+  const angle = Math.atan2(mouseY - centerY, mouseX - centerX) * (180 / Math.PI);
+  
+  // 2. Normalize to your specific 270° arc
+  // Adding 225 aligns the 0 position with the South-West start of your SVG
+  let normalizedAngle = (angle + 225) % 360;
+
+  // 3. THE DEAD ZONE (The 90-degree gap at the bottom)
+  // We use 270 as the hard limit for our arc. 
+  // If the mouse enters the "empty" 90 degrees, we lock to the nearest end-stop.
+  if (normalizedAngle < 10 || normalizedAngle > 300) {
+    // If we were high, stay at 100. If we were low, stay at 0.
+    return currentVal = 0;
+  }
+
+  // 4. Calculate Percentage
+  const newValue = Math.round((normalizedAngle / 270) * 100);
+  const clampedValue = Math.min(100, Math.max(0, newValue));
+
+  // 5. JUMP PROTECTION
+  // Rejects "impossible" jumps (like 0 to 80 in one frame)
+  // if (Math.abs(clampedValue - currentVal) > 60) {
+  //   return currentVal;
+  // }
+
+  return clampedValue;
+};
 
 export default function Playground() {
+  const [targetSpeed, setTargetSpeed] = useState(0);
+  const [isDragging, setIsDragging] = useState(false); //track mouse dragging
+  const dialRef = useRef(null); // Reference to the dial container
+  const targetSpeedRef = useRef(targetSpeed);
   const ref = useRef(null)
   const isInView = useInView(ref, { once: true, margin: '-100px' })
   const [isRunning, setIsRunning] = useState(false)
@@ -16,30 +52,59 @@ export default function Playground() {
     pressure: 45,
     speed: 0,
     production: 0,
+    oee: 0,
     status: 'STOPPED'
   })
 
-  useEffect(() => {
-    let interval
-    if (isRunning) {
-      interval = setInterval(() => {
-        setPlcData(prev => ({
-          temperature: Math.min(95, Math.max(65, prev.temperature + generateRandomValue(-2, 3))),
-          pressure: Math.min(60, Math.max(30, prev.pressure + generateRandomValue(-3, 3))),
-          speed: Math.min(100, Math.max(60, prev.speed + generateRandomValue(-5, 5))),
-          production: prev.production + generateRandomValue(1, 3),
-          status: 'RUNNING'
-        }))
-      }, 500)
-    }
-    return () => clearInterval(interval)
-  }, [isRunning])
 
-  const handleStart = () => {
-    setIsRunning(true)
-    setPlcData(prev => ({ ...prev, speed: 75, status: 'STARTING...' }))
-    setTimeout(() => setPlcData(prev => ({ ...prev, status: 'RUNNING' })), 1000)
+
+  // 2. Sync Ref with State
+  useEffect(() => {
+    targetSpeedRef.current = targetSpeed;
+  }, [targetSpeed]);
+
+  // 3. PLC Scan Cycle
+  useEffect(() => {
+    let interval;
+    if (isRunning) { // isRunning is now in scope
+      interval = setInterval(() => {
+        setPlcData(prev => {
+          const liveTarget = targetSpeedRef.current;
+          const speedStep = liveTarget > prev.speed ? 5 : -5;
+          const currentSpeed = Math.abs(liveTarget - prev.speed) <= 5 
+            ? liveTarget 
+            : prev.speed + speedStep;
+          const machineIsActive = currentSpeed > 1; // 1% threshold for noise
+          return {
+            ...prev,
+            speed: currentSpeed,
+            // NOISE GATING: If not active, values are rock-solid constants
+            temperature: machineIsActive 
+              ? Math.round(65 + (currentSpeed * 0.3) + generateRandomValue(-1, 2)) 
+              : 72,
+            pressure: machineIsActive 
+              ? Math.round(20 + (currentSpeed * 0.4) + generateRandomValue(-2, 2)) 
+              : 0,
+            production: machineIsActive 
+              ? prev.production + (currentSpeed > 20 ? 1 : 0) // Only produce if fast enough
+              : prev.production,
+            oee: machineIsActive ? Math.round((currentSpeed / 100) * 98) : 0,
+            status: currentSpeed === 0 ? 'IDLE' : 'RUNNING'
+          };
+        });
+      }, 500);
+    }
+    return () => clearInterval(interval);
+  }, [isRunning]);
+
+const handleStart = () => {
+  // Reset production if starting from a fresh stop
+  if (plcData.status === 'STOPPED') {
+    setTargetSpeed(75); // Set the dial first
   }
+  setIsRunning(true); // Then enable the "PLC Scan"
+  setPlcData(prev => ({ ...prev, status: 'STARTING...' }));
+};
 
   const handleStop = () => {
     setIsRunning(false)
@@ -64,6 +129,46 @@ export default function Playground() {
       default: return '#ef4444'
     }
   }
+// Dial movement
+const handleDialMove = (e) => {
+  if (!isRunning) return;
+  const rect = e.currentTarget.getBoundingClientRect();
+  const centerX = rect.left + rect.width / 2;
+  const centerY = rect.top + rect.height / 2;
+  
+  // Pass current targetSpeed to check for jumps
+  const newValue = calculateValueFromAngle(centerX, centerY, e.clientX, e.clientY, targetSpeed);
+  setTargetSpeed(newValue);
+};
+
+// Function to handle the calculation logic
+  const handleMove = (clientX, clientY) => {
+    if (!dialRef.current) return;
+    const rect = dialRef.current.getBoundingClientRect();
+    const centerX = rect.left + rect.width / 2;
+    const centerY = rect.top + rect.height / 2;
+    
+    const newValue = calculateValueFromAngle(centerX, centerY, clientX, clientY, targetSpeed);
+    setTargetSpeed(newValue);
+  };
+
+// Attach global listeners when dragging starts
+  useEffect(() => {
+    const onMouseMove = (e) => {
+      if (isDragging) handleMove(e.clientX, e.clientY);
+    };
+    const onMouseUp = () => setIsDragging(false);
+
+    if (isDragging) {
+      window.addEventListener('mousemove', onMouseMove);
+      window.addEventListener('mouseup', onMouseUp);
+    }
+
+    return () => {
+      window.removeEventListener('mousemove', onMouseMove);
+      window.removeEventListener('mouseup', onMouseUp);
+    };
+  }, [isDragging]);
 
   return (
     <section
@@ -202,6 +307,81 @@ export default function Playground() {
             </div>
           </div>
 
+        <div className="dial-container" style={{ textAlign: 'center', padding: '20px' }}>
+      <label className="mono" style={{ display: 'block', marginBottom: '1rem', color: 'var(--accent-cyan)' }}>
+        ROTARY SPEED POTENTIOMETER
+      </label>
+        <div 
+          ref={dialRef}
+          onMouseDown={(e) => {
+            if (!isRunning) return;
+            setIsDragging(true);
+            handleMove(e.clientX, e.clientY); // Initial click sets value
+          }}
+          style={{
+            width: '120px',
+            height: '120px',
+            margin: '0 auto',
+            position: 'relative',
+            cursor: isRunning ? 'grabbing' : 'not-allowed',
+            touchAction: 'none' // Prevents scrolling while dragging on mobile
+          }}
+        >
+          {/* SVG Code from previous step goes here */}
+       
+      {/* The Dial SVG */}
+      <div 
+        onMouseMove={(e) => e.buttons === 1 && handleDialMove(e)} // Only move if clicking
+        onClick={handleDialMove}
+        style={{
+          width: '120px',
+          height: '120px',
+          margin: '0 auto',
+          position: 'relative',
+          cursor: isRunning ? 'pointer' : 'not-allowed'
+        }}
+      >
+      <svg viewBox="0 0 100 100" style={{ transform: 'rotate(135deg)', overflow: 'visible' }}>
+        {/* Background Track - Only 270 degrees */}
+        <circle 
+          cx="50" cy="50" r="40" fill="none" 
+          stroke="rgba(255,255,255,0.1)" 
+          strokeWidth="8" 
+          strokeDasharray="188.5 251.3" // 188.5 is exactly 270 degrees of a 40r circle
+          strokeLinecap="round"
+        />
+        {/* Active Value Track - Clamped to prevent "ghost" lines */}
+        <circle 
+          cx="50" cy="50" r="40" fill="none" 
+          // If speed is 0, hide the stroke entirely to prevent the "ghost dot"
+          stroke={targetSpeed > 0 ? "var(--accent-cyan)" : "transparent"} 
+          strokeWidth="8" 
+          // Clamping math to ensure no overflow
+          strokeDasharray={`${Math.max(0, (targetSpeed / 100) * 188.5)} 251.3`}
+          strokeLinecap="round"
+          style={{ transition: 'stroke-dasharray 0.1s linear, stroke 0.2s' }}
+        />
+      </svg>
+        
+        {/* The Physical "Knob" indicator */}
+        <div style={{
+          position: 'absolute',
+          top: '50%', left: '50%',
+          width: '60px', height: '60px',
+          background: '#1a1a1a',
+          borderRadius: '50%',
+          border: '2px solid #333',
+          transform: `translate(-50%, -50%) rotate(${(targetSpeed * 2.7) - 135}deg)`,
+          boxShadow: '0 4px 10px rgba(0,0,0,0.5)'
+        }}>
+          <div style={{ width: '4px', height: '15px', background: 'var(--accent-cyan)', margin: '0 auto', borderRadius: '2px' }} />
+        </div>
+      </div>
+      
+      <div style={{ marginTop: '1rem', fontWeight: 'bold', color: 'white' }}>{targetSpeed}%</div>
+    </div>
+    </div>
+
           <div style={{
             display: 'grid',
             gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))',
@@ -246,6 +426,16 @@ export default function Playground() {
               isCounter
               isRunning={isRunning}
             />
+            <MetricCard
+            icon={Gauge}
+            label="OEE (Live)"
+            value={plcData.oee}
+            unit="%"
+            color="#facc15" // Gold for performance
+            min={0}
+            max={100}
+            isRunning={isRunning}
+          />
           </div>
 
           <div style={{
@@ -270,6 +460,9 @@ export default function Playground() {
             </div>
             <div style={{ color: '#a855f7' }}>
               Program:MainProgram.ProductionCount := {plcData.production};
+            </div>
+            <div style={{ color: '#facc15' }}>
+              Program:MainProgram.OEE := {plcData.oee};
             </div>
           </div>
         </motion.div>

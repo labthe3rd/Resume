@@ -55,9 +55,9 @@ export default function About() {
               lineHeight: 1.8,
               marginBottom: '1.5rem'
             }}>
-              Highly motivated controls engineer with extensive experience in both OEM design 
-              environments and on-site plant operations. My expertise spans PLC programming, 
-              industrial automation, OT network administration, and software development.
+              A Michigan Tech BSEE graduate, I bridge the gap between <strong>Legacy Controls</strong> 
+              and <strong>Modern IT Infrastructure</strong>. My focus is on Digital Transformation—turning 
+              unreliable plant-floor data into secure, actionable insights. Having managed projects across 4 industries, I am committed to delivering excellence wherever the challenge leads. I am fully open to relocation for opportunities that involve large-scale digital transformation or complex OT overhauls.
             </p>
             <p style={{
               fontSize: '1.125rem',
@@ -65,9 +65,9 @@ export default function About() {
               lineHeight: 1.8,
               marginBottom: '2rem'
             }}>
-              From designing autonomous robotic cells to implementing plant-wide OT security 
-              overhauls, I bring a unique combination of technical depth and practical 
-              problem-solving to every project.
+              In the Grand Rapids industrial hub, I specialize in high-speed Food/CPG and 
+              Automotive assembly, delivering "Secure-by-Design" automation that prioritizes 
+              both safety and multi-million dollar ROI. Open to relocation to support the evolution of Food/CPG and Automotive manufacturing hubs.
             </p>
 
             <div className="glass-card" style={{
