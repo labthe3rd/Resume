@@ -103,7 +103,11 @@ export default function Hero() {
           </motion.a>
 
           <motion.a
-            href="mailto:Labthe3rd@gmail.com"
+            href="#contact"
+            onClick={(e) => {
+              e.preventDefault()
+              document.getElementById('contact')?.scrollIntoView({ behavior: 'smooth' })
+            }}
             whileHover={{ scale: 1.05 }}
             whileTap={{ scale: 0.95 }}
             className="cta-button cta-button-outline"
@@ -150,11 +154,16 @@ export default function Hero() {
             <Globe size={24} />
           </motion.a>
           <motion.a
-            href="mailto:Labthe3rd@gmail.com"
+            href="#contact"
+            onClick={(e) => {
+              e.preventDefault()
+              document.getElementById('contact')?.scrollIntoView({ behavior: 'smooth' })
+            }}
             whileHover={{ scale: 1.1, color: '#00d4ff' }}
             style={{
               color: 'var(--text-tertiary)',
-              transition: 'color 0.3s ease'
+              transition: 'color 0.3s ease',
+              cursor: 'pointer'
             }}
           >
             <Mail size={24} />

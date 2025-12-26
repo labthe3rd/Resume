@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { Menu, X, Download, Mail } from 'lucide-react'
+import { Menu, X, Download } from 'lucide-react'
 
 const navItems = [
   { id: 'about', label: 'About' },
@@ -118,7 +118,8 @@ export default function Navigation({ activeSection }) {
 
           <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
             <motion.a
-              href="mailto:Labthe3rd@gmail.com"
+              href="/Louis_Bersine_Resume.pdf"
+              download="Louis_Bersine_Resume.pdf"
               whileHover={{ scale: 1.05 }}
               whileTap={{ scale: 0.95 }}
               className="cta-button"
@@ -127,8 +128,8 @@ export default function Navigation({ activeSection }) {
                 fontSize: '0.875rem'
               }}
             >
-              <Mail size={16} />
-              <span className="desktop-only">Contact</span>
+              <Download size={16} />
+              <span className="desktop-only">Resume</span>
             </motion.a>
 
             <motion.button

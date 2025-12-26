@@ -1,156 +1,113 @@
 # Louis Bersine - Portfolio Website
 
-A modern, interactive portfolio website built with Next.js 14, featuring:
+Modern portfolio website with AI-powered chatbot using RAG (Retrieval-Augmented Generation).
+
+## Features
 
 - 🎨 **Cinematic Dark Mode** with glassmorphism effects
 - ✨ **3D Particle Background** using Three.js
 - 🎯 **Bento Grid Layout** for skills and projects
 - 🎮 **Interactive PLC Playground** demo
 - 🤖 **AI Chatbot with RAG** powered by Google Gemini
+- 📁 **File Upload Support** - PDF, TXT, MD, CSV, Images (OCR)
 - 📱 **Fully Responsive** design
-- ⚡ **Optimized Performance** for fast loading
 
 ## Tech Stack
 
 - **Framework:** Next.js 14
-- **Styling:** CSS Variables + Inline Styles
+- **AI:** Google Gemini API (Chat + Embeddings + Vision OCR)
+- **Vector DB:** Upstash Vector (free tier)
 - **Animations:** Framer Motion
 - **3D Graphics:** Three.js + React Three Fiber
-- **Icons:** Lucide React
-- **AI/Chat:** Google Gemini API
-- **Vector DB:** Upstash Vector (free tier)
 - **Deployment:** Vercel
 
-## Getting Started
+## Setup
 
-### 1. Set Up Upstash Vector (Free)
+### 1. Create Upstash Vector Database
 
 1. Go to [console.upstash.com](https://console.upstash.com)
-2. Create a free account
-3. Click "Create Database" → Select "Vector"
-4. Name it (e.g., "louis-portfolio-rag")
-5. Select region closest to you
-6. **Important:** Set dimensions to `3072` (required for Gemini embedding model)
-7. Copy the `UPSTASH_VECTOR_REST_URL` and `UPSTASH_VECTOR_REST_TOKEN`
+2. Create a new **Vector** database (NOT Redis!)
+3. Set dimensions to **768**
+4. Copy the REST URL and **Read-Write Token** (not read-only!)
 
-### 2. Environment Variables
+### 2. Get Google API Key
 
-Create `.env.local` for local development:
+1. Go to [aistudio.google.com/apikey](https://aistudio.google.com/apikey)
+2. Create a new API key
 
-```bash
-cp .env.example .env.local
+### 3. Set Environment Variables
+
+In Vercel (or `.env.local` for development):
+
+```
+GOOGLE_API_KEY=your_google_api_key
+UPSTASH_VECTOR_REST_URL=https://xxx.upstash.io
+UPSTASH_VECTOR_REST_TOKEN=xxx_read_write_token
+ADMIN_PASSWORD=your_secure_password
 ```
 
-Fill in the values:
-```env
-GOOGLE_API_KEY=your_google_gemini_api_key
-UPSTASH_VECTOR_REST_URL=https://your-db.upstash.io
-UPSTASH_VECTOR_REST_TOKEN=your_token_here
-ADMIN_PASSWORD=choose_a_secure_password
-```
-
-### 3. Local Development
+### 4. Deploy
 
 ```bash
 npm install
-npm run dev
+npm run build
+npm start
 ```
 
-Open [http://localhost:3000](http://localhost:3000) to view the site.
+Or push to GitHub and deploy on Vercel.
 
-### 4. Deploy to Vercel
+## Admin Panel
 
-#### Option A: Git Repository (Recommended)
+Access `/admin` with your password to:
 
-1. Push code to GitHub/GitLab
-2. Go to [vercel.com](https://vercel.com)
-3. Import repository
-4. **Add Environment Variables** in project settings:
-   - `GOOGLE_API_KEY`
-   - `UPSTASH_VECTOR_REST_URL`
-   - `UPSTASH_VECTOR_REST_TOKEN`
-   - `ADMIN_PASSWORD`
-5. Deploy
+- **Upload Files** - Drag & drop or click to browse
+- **Manual Text Entry** - Paste text directly
+- **Test RAG** - Verify retrieval is working
+- **Test Config** - Debug API connections
+- **Clear Database** - Reset all vectors
 
-#### Option B: Vercel CLI
+### Supported File Types
 
-```bash
-npm i -g vercel
-vercel
-# Add env vars when prompted or in dashboard
-vercel --prod
+| Format | Processing Method |
+|--------|-------------------|
+| PDF | Gemini AI text extraction |
+| TXT, MD | Direct text reading |
+| CSV | Parsed to readable format |
+| JPG, PNG, GIF, WebP | Gemini Vision OCR |
+
+## Model Configuration
+
+Edit `lib/ai-config.js` to change models:
+
+```javascript
+CHAT_MODEL: 'gemini-2.5-flash-lite',     // Chat responses
+EMBEDDING_MODEL: 'gemini-embedding-001',  // Vector embeddings
+EMBEDDING_DIMENSIONS: 768,                // Must match Upstash DB
 ```
 
-## RAG Admin Panel
+### Available Chat Models
 
-Access the admin panel at `/admin` to upload documents:
-
-1. Navigate to `yoursite.com/admin`
-2. Enter your `ADMIN_PASSWORD`
-3. Upload text content about yourself
-4. The chatbot will use this for enhanced responses
-
-**Security Note:** The admin page is protected by password. The URL is not linked anywhere on the site, but for extra security you could:
-- Use a complex password
-- Add rate limiting
-- Implement IP whitelisting via Vercel middleware
-
-### What to Upload
-
-Upload detailed information like:
-- Extended work history details
-- Project deep-dives
-- Technical blog posts
-- Certifications and training
-- Personal interests/hobbies
-- Anything you want the chatbot to know
+- `gemini-2.5-flash-lite` - Fast & cheap (recommended)
+- `gemini-2.5-flash` - More capable
+- `gemini-2.0-flash` - Previous generation
+- `gemini-2.0-flash-lite` - Fastest
 
 ## API Key Security
 
 Your API keys are **never exposed** to the client:
 
-1. Keys are stored as environment variables
-2. API routes run server-side only
-3. Client only communicates with your own `/api/*` endpoints
+1. Keys stored as server-side environment variables only
+2. All API routes run server-side
+3. Client only communicates with `/api/*` endpoints
 4. Vercel encrypts environment variables at rest
 
 **Never commit `.env.local` to git!**
 
-## Project Structure
-
-```
-├── app/
-│   ├── admin/
-│   │   └── page.js          # RAG upload admin panel
-│   ├── api/
-│   │   ├── chat/
-│   │   │   └── route.js     # Chat endpoint with RAG
-│   │   └── admin/
-│   │       └── upload/
-│   │           └── route.js # Document upload endpoint
-│   ├── globals.css
-│   ├── layout.js
-│   └── page.js
-├── components/
-│   ├── Chatbot.js           # AI chat widget
-│   ├── Navigation.js
-│   ├── Hero.js
-│   ├── About.js
-│   ├── Skills.js
-│   ├── Experience.js
-│   ├── Projects.js
-│   ├── Playground.js
-│   ├── Contact.js
-│   ├── Footer.js
-│   └── Scene3D.js
-├── .env.example
-└── package.json
-```
-
 ## Free Tier Limits
 
 - **Upstash Vector:** 10,000 vectors, 10,000 queries/day
-- **Google Gemini:** 15 RPM free tier (plenty for portfolio)
+- **Gemini API:** 1,500 requests/day for embeddings
+- **Gemini Vision:** Included in Gemini quota
 - **Vercel:** 100GB bandwidth, serverless functions included
 
 ## License

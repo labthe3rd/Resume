@@ -3,7 +3,7 @@
 import { motion } from 'framer-motion'
 import { useInView } from 'framer-motion'
 import { useRef, useState } from 'react'
-import { Mail, Linkedin, Globe, Send, MapPin, CheckCircle } from 'lucide-react'
+import { Mail, Linkedin, Globe, Send, MapPin, CheckCircle, Loader2, AlertCircle, Phone, User } from 'lucide-react'
 
 export default function Contact() {
   const ref = useRef(null)
@@ -11,16 +11,37 @@ export default function Contact() {
   const [formState, setFormState] = useState({
     name: '',
     email: '',
+    phone: '',
     message: ''
   })
-  const [isSubmitted, setIsSubmitted] = useState(false)
+  const [status, setStatus] = useState({ type: '', message: '' })
+  const [isSubmitting, setIsSubmitting] = useState(false)
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault()
-    const mailtoLink = `mailto:Labthe3rd@gmail.com?subject=Contact from ${formState.name}&body=${encodeURIComponent(formState.message)}%0A%0AFrom: ${formState.email}`
-    window.location.href = mailtoLink
-    setIsSubmitted(true)
-    setTimeout(() => setIsSubmitted(false), 3000)
+    setIsSubmitting(true)
+    setStatus({ type: '', message: '' })
+
+    try {
+      const response = await fetch('/api/contact', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(formState)
+      })
+
+      const data = await response.json()
+
+      if (response.ok) {
+        setStatus({ type: 'success', message: 'Message sent successfully! I\'ll get back to you soon.' })
+        setFormState({ name: '', email: '', phone: '', message: '' })
+      } else {
+        setStatus({ type: 'error', message: data.error || 'Failed to send message. Please try again.' })
+      }
+    } catch (error) {
+      setStatus({ type: 'error', message: 'Network error. Please check your connection and try again.' })
+    }
+
+    setIsSubmitting(false)
   }
 
   const contactLinks = [
@@ -53,6 +74,28 @@ export default function Contact() {
       color: '#10b981'
     }
   ]
+
+  const inputStyle = {
+    width: '100%',
+    padding: '1rem',
+    background: 'var(--glass-bg)',
+    border: '1px solid var(--glass-border)',
+    borderRadius: '12px',
+    color: 'white',
+    fontFamily: 'Space Grotesk, sans-serif',
+    fontSize: '1rem',
+    outline: 'none',
+    transition: 'border-color 0.3s ease'
+  }
+
+  const labelStyle = {
+    display: 'block',
+    fontSize: '0.75rem',
+    color: 'var(--text-tertiary)',
+    textTransform: 'uppercase',
+    letterSpacing: '0.1em',
+    marginBottom: '0.5rem'
+  }
 
   return (
     <section
@@ -209,120 +252,119 @@ export default function Contact() {
             </h3>
 
             <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+              {/* Name Field */}
               <div>
-                <label style={{
-                  display: 'block',
-                  fontSize: '0.75rem',
-                  color: 'var(--text-tertiary)',
-                  textTransform: 'uppercase',
-                  letterSpacing: '0.1em',
-                  marginBottom: '0.5rem'
-                }}>
-                  Name
+                <label style={labelStyle}>
+                  <User size={12} style={{ display: 'inline', marginRight: '0.5rem', verticalAlign: 'middle' }} />
+                  Name *
                 </label>
                 <input
                   type="text"
                   value={formState.name}
                   onChange={(e) => setFormState({ ...formState, name: e.target.value })}
                   required
-                  style={{
-                    width: '100%',
-                    padding: '1rem',
-                    background: 'var(--glass-bg)',
-                    border: '1px solid var(--glass-border)',
-                    borderRadius: '12px',
-                    color: 'white',
-                    fontFamily: 'Space Grotesk, sans-serif',
-                    fontSize: '1rem',
-                    outline: 'none',
-                    transition: 'border-color 0.3s ease'
-                  }}
+                  placeholder="Your name"
+                  style={inputStyle}
                   onFocus={(e) => e.target.style.borderColor = '#00d4ff'}
                   onBlur={(e) => e.target.style.borderColor = 'var(--glass-border)'}
                 />
               </div>
 
+              {/* Email Field */}
               <div>
-                <label style={{
-                  display: 'block',
-                  fontSize: '0.75rem',
-                  color: 'var(--text-tertiary)',
-                  textTransform: 'uppercase',
-                  letterSpacing: '0.1em',
-                  marginBottom: '0.5rem'
-                }}>
-                  Email
+                <label style={labelStyle}>
+                  <Mail size={12} style={{ display: 'inline', marginRight: '0.5rem', verticalAlign: 'middle' }} />
+                  Email *
                 </label>
                 <input
                   type="email"
                   value={formState.email}
                   onChange={(e) => setFormState({ ...formState, email: e.target.value })}
                   required
-                  style={{
-                    width: '100%',
-                    padding: '1rem',
-                    background: 'var(--glass-bg)',
-                    border: '1px solid var(--glass-border)',
-                    borderRadius: '12px',
-                    color: 'white',
-                    fontFamily: 'Space Grotesk, sans-serif',
-                    fontSize: '1rem',
-                    outline: 'none',
-                    transition: 'border-color 0.3s ease'
-                  }}
+                  placeholder="your.email@example.com"
+                  style={inputStyle}
                   onFocus={(e) => e.target.style.borderColor = '#00d4ff'}
                   onBlur={(e) => e.target.style.borderColor = 'var(--glass-border)'}
                 />
               </div>
 
+              {/* Phone Field */}
               <div>
-                <label style={{
-                  display: 'block',
-                  fontSize: '0.75rem',
-                  color: 'var(--text-tertiary)',
-                  textTransform: 'uppercase',
-                  letterSpacing: '0.1em',
-                  marginBottom: '0.5rem'
-                }}>
-                  Message
+                <label style={labelStyle}>
+                  <Phone size={12} style={{ display: 'inline', marginRight: '0.5rem', verticalAlign: 'middle' }} />
+                  Phone Number
+                </label>
+                <input
+                  type="tel"
+                  value={formState.phone}
+                  onChange={(e) => setFormState({ ...formState, phone: e.target.value })}
+                  placeholder="(555) 123-4567"
+                  style={inputStyle}
+                  onFocus={(e) => e.target.style.borderColor = '#00d4ff'}
+                  onBlur={(e) => e.target.style.borderColor = 'var(--glass-border)'}
+                />
+              </div>
+
+              {/* Message Field */}
+              <div>
+                <label style={labelStyle}>
+                  Message *
                 </label>
                 <textarea
                   value={formState.message}
                   onChange={(e) => setFormState({ ...formState, message: e.target.value })}
                   required
                   rows={4}
+                  placeholder="How can I help you?"
                   style={{
-                    width: '100%',
-                    padding: '1rem',
-                    background: 'var(--glass-bg)',
-                    border: '1px solid var(--glass-border)',
-                    borderRadius: '12px',
-                    color: 'white',
-                    fontFamily: 'Space Grotesk, sans-serif',
-                    fontSize: '1rem',
-                    outline: 'none',
-                    resize: 'vertical',
-                    transition: 'border-color 0.3s ease'
+                    ...inputStyle,
+                    resize: 'vertical'
                   }}
                   onFocus={(e) => e.target.style.borderColor = '#00d4ff'}
                   onBlur={(e) => e.target.style.borderColor = 'var(--glass-border)'}
                 />
               </div>
 
+              {/* Status Message */}
+              {status.message && (
+                <motion.div
+                  initial={{ opacity: 0, y: -10 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  style={{
+                    padding: '1rem',
+                    borderRadius: '12px',
+                    background: status.type === 'success' ? 'rgba(34, 197, 94, 0.1)' : 'rgba(239, 68, 68, 0.1)',
+                    border: `1px solid ${status.type === 'success' ? 'rgba(34, 197, 94, 0.3)' : 'rgba(239, 68, 68, 0.3)'}`,
+                    color: status.type === 'success' ? '#22c55e' : '#ef4444',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '0.75rem',
+                    fontSize: '0.875rem'
+                  }}
+                >
+                  {status.type === 'success' ? <CheckCircle size={18} /> : <AlertCircle size={18} />}
+                  {status.message}
+                </motion.div>
+              )}
+
+              {/* Submit Button */}
               <motion.button
                 type="submit"
-                whileHover={{ scale: 1.02 }}
-                whileTap={{ scale: 0.98 }}
+                disabled={isSubmitting}
+                whileHover={{ scale: isSubmitting ? 1 : 1.02 }}
+                whileTap={{ scale: isSubmitting ? 1 : 0.98 }}
                 className="cta-button"
                 style={{
                   justifyContent: 'center',
-                  marginTop: '0.5rem'
+                  marginTop: '0.5rem',
+                  opacity: isSubmitting ? 0.7 : 1,
+                  cursor: isSubmitting ? 'wait' : 'pointer'
                 }}
               >
-                {isSubmitted ? (
+                {isSubmitting ? (
                   <>
-                    <CheckCircle size={18} />
-                    Opening Email Client...
+                    <Loader2 size={18} style={{ animation: 'spin 1s linear infinite' }} />
+                    Sending...
                   </>
                 ) : (
                   <>
@@ -335,6 +377,13 @@ export default function Contact() {
           </motion.div>
         </div>
       </div>
+
+      <style jsx global>{`
+        @keyframes spin {
+          from { transform: rotate(0deg); }
+          to { transform: rotate(360deg); }
+        }
+      `}</style>
     </section>
   )
 }
