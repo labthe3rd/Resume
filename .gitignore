@@ -44,3 +44,7 @@ coverage/
 docker-compose.yml
 Dockerfile
 .dockerignore
+
+#Do not upload bacckend
+bacckend
+bacckend/*

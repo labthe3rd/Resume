@@ -1,0 +1,16 @@
+{
+  "name": "unstable-system-simulator",
+  "version": "2.0.0",
+  "type": "module",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "node-opcua": "^2.128.0",
+    "express": "^4.21.0",
+    "cors": "^2.8.5",
+    "ws": "^8.18.0",
+    "winston": "^3.14.0"
+  }
+}
