@@ -39,6 +39,7 @@ export default function ControlSystem({ fullPage = false }) {
   useEffect(() => {
     let ws = null
     let reconnectTimer = null
+    let lastAction = null
 
     const connect = () => {
       const isLocal = typeof window !== 'undefined' && window.location.hostname === 'localhost'
@@ -644,6 +645,7 @@ function GaugeCard({ label, value, color, max = 100 }) {
   
   return (
     <div style={{
+      padding: '0.6rem',
       padding: '0.6rem',
       background: 'rgba(0,0,0,0.3)',
       borderRadius: '8px',
