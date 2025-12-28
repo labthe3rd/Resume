@@ -35,7 +35,7 @@ export default function ControlSystem({ fullPage = false }) {
     let reconnectTimer = null
 
     const connect = () => {
-      const wsUrl = process.env.NEXT_PUBLIC_WS_URL || 'ws://192.168.0.70:3101/ws'
+      const wsUrl = process.env.NEXT_PUBLIC_WS_URL || 'ws://localhost:3001/ws'
       ws = new WebSocket(wsUrl)
 
       ws.onopen = () => {
@@ -128,7 +128,7 @@ export default function ControlSystem({ fullPage = false }) {
   }, [history])
 
   const apiCall = async (endpoint, body = {}) => {
-    const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://192.168.0.70:3101'
+    const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
     try {
       const res = await fetch(`${apiUrl}${endpoint}`, {
         method: 'POST',
@@ -160,12 +160,17 @@ export default function ControlSystem({ fullPage = false }) {
     setIsLoading(true)
 
     try {
-      // Send instruction to agent
-      await apiCall('/agent/instruct', { instruction: message })
+      const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
       
-      // Get chat response
-      const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://192.168.0.70:3101'
-      const res = await fetch(`${apiUrl}/chat`, {
+      // Send instruction to agent
+      await fetch(`${apiUrl}/agent/instruct`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ instruction: message })
+      })
+      
+      // Get chat response from control system (not portfolio chatbot)
+      const res = await fetch(`${apiUrl}/control/chat`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ message })
@@ -351,7 +356,9 @@ export default function ControlSystem({ fullPage = false }) {
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.75rem' }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
                     <Brain size={18} style={{ color: '#00d4ff' }} />
-                    <span className="mono" style={{ color: 'var(--text-tertiary)', fontSize: '0.75rem' }}>AI AGENT</span>
+                    <span className="mono" style={{ color: 'var(--text-tertiary)', fontSize: '0.75rem' }}>
+                      AI AGENT #{systemState.agent?.instanceId || 1}
+                    </span>
                   </div>
                   <motion.button
                     onClick={toggleAgent}
@@ -387,6 +394,41 @@ export default function ControlSystem({ fullPage = false }) {
                 </div>
                 <div className="mono" style={{ fontSize: '0.7rem', color: 'var(--text-tertiary)', marginTop: '0.25rem' }}>
                   Control Output: <span style={{ color: '#00d4ff' }}>{systemState.controlOutput?.toFixed(1)}</span>
+                </div>
+              </div>
+
+              {/* Hallucination Risk Monitor */}
+              <div style={{
+                background: 'rgba(0,0,0,0.3)',
+                borderRadius: '12px',
+                padding: '1rem'
+              }}>
+                <div className="mono" style={{ color: 'var(--text-tertiary)', fontSize: '0.75rem', marginBottom: '0.75rem' }}>
+                  RELIABILITY MONITOR
+                </div>
+                <RiskGauge 
+                  risk={systemState.agent?.hallucination?.risk || 0}
+                  level={systemState.agent?.hallucination?.riskLevel || 'NORMAL'}
+                />
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.5rem', marginTop: '0.75rem', fontSize: '0.7rem' }}>
+                  <div>
+                    <span style={{ color: 'var(--text-tertiary)' }}>Quality: </span>
+                    <span style={{ color: '#10b981' }}>{systemState.agent?.hallucination?.recentQuality || 100}%</span>
+                  </div>
+                  <div>
+                    <span style={{ color: 'var(--text-tertiary)' }}>Decisions: </span>
+                    <span style={{ color: '#00d4ff' }}>{systemState.agent?.hallucination?.totalDecisions || 0}</span>
+                  </div>
+                  <div>
+                    <span style={{ color: 'var(--text-tertiary)' }}>Bad Streak: </span>
+                    <span style={{ color: systemState.agent?.hallucination?.consecutiveBadDecisions > 2 ? '#ef4444' : '#888' }}>
+                      {systemState.agent?.hallucination?.consecutiveBadDecisions || 0}
+                    </span>
+                  </div>
+                  <div>
+                    <span style={{ color: 'var(--text-tertiary)' }}>Failovers: </span>
+                    <span style={{ color: '#fbbf24' }}>{systemState.supervisor?.failoverCount || 0}</span>
+                  </div>
                 </div>
               </div>
 
@@ -558,5 +600,64 @@ function ControlButton({ onClick, color, icon: Icon, children }) {
       <Icon size={14} />
       {children}
     </motion.button>
+  )
+}
+
+function RiskGauge({ risk, level }) {
+  const getColor = () => {
+    if (level === 'CRITICAL') return '#ef4444'
+    if (level === 'WARNING') return '#fbbf24'
+    return '#10b981'
+  }
+  
+  const color = getColor()
+  
+  return (
+    <div>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.25rem' }}>
+        <span style={{ 
+          fontSize: '1.25rem', 
+          fontWeight: 'bold', 
+          color 
+        }}>
+          {risk}%
+        </span>
+        <span style={{ 
+          fontSize: '0.65rem', 
+          fontWeight: 'bold',
+          padding: '0.15rem 0.5rem',
+          borderRadius: '4px',
+          background: `${color}20`,
+          color,
+          animation: level === 'CRITICAL' ? 'pulse 1s infinite' : 'none'
+        }}>
+          {level}
+        </span>
+      </div>
+      <div style={{ 
+        height: 6, 
+        background: 'rgba(255,255,255,0.1)', 
+        borderRadius: 3,
+        overflow: 'hidden'
+      }}>
+        <div style={{
+          height: '100%',
+          width: `${risk}%`,
+          background: `linear-gradient(90deg, #10b981, ${risk > 50 ? '#fbbf24' : '#10b981'}, ${risk > 70 ? '#ef4444' : '#fbbf24'})`,
+          borderRadius: 3,
+          transition: 'width 0.3s'
+        }} />
+      </div>
+      <div style={{ 
+        display: 'flex', 
+        justifyContent: 'space-between', 
+        fontSize: '0.6rem', 
+        color: 'var(--text-tertiary)',
+        marginTop: '0.25rem'
+      }}>
+        <span>Low Risk</span>
+        <span>High Risk</span>
+      </div>
+    </div>
   )
 }
