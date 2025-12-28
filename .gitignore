@@ -39,3 +39,8 @@ coverage/
 
 # Misc
 *.pem
+
+#not sharing
+docker-compose.yml
+Dockerfile
+.dockerignore
