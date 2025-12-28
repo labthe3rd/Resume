@@ -57,7 +57,7 @@ export default function About() {
             }}>
               A Michigan Tech BSEE graduate, I bridge the gap between <strong>Legacy Controls</strong> 
               and <strong>Modern IT Infrastructure</strong>. My focus is on Digital Transformation—turning 
-              unreliable plant-floor data into secure, actionable insights. Having managed projects across 4 industries, I am committed to delivering excellence wherever the challenge leads. I am fully open to relocation for opportunities that involve large-scale digital transformation or complex OT overhauls.
+              unreliable plant-floor data into secure, actionable insights. Having managed projects across 4 industries, I am committed to delivering excellence wherever the challenge leads.
             </p>
             <p style={{
               fontSize: '1.125rem',
