@@ -39,12 +39,12 @@ export default function ControlSystem({ fullPage = false }) {
   useEffect(() => {
     let ws = null
     let reconnectTimer = null
-    let lastAction = null
 
     const connect = () => {
       const isLocal = typeof window !== 'undefined' && window.location.hostname === 'localhost'
       const wsUrl = process.env.NEXT_PUBLIC_WS_URL || 
         (isLocal ? 'ws://localhost:3101/ws' : 'wss://api.louisbersine.com/ws')
+
       
       console.log('Connecting to WebSocket:', wsUrl)
       ws = new WebSocket(wsUrl)
