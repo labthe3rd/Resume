@@ -271,6 +271,91 @@ class HallucinationTracker {
     }
 }
 
+class ExperienceMemory {
+  constructor(maxSize = 500) {
+    this.experiences = []
+    this.maxSize = maxSize
+    this.successfulConfigs = [] // PID configs that worked well
+  }
+
+  record(state, action, pidBefore, pidAfter, errorBefore, errorAfter) {
+    const reward = this.calculateReward(errorBefore, errorAfter)
+    
+    this.experiences.push({
+      timestamp: Date.now(),
+      state: { error: errorBefore, stability: state.stability },
+      action,
+      pidBefore,
+      pidAfter,
+      errorBefore,
+      errorAfter,
+      reward
+    })
+
+    if (this.experiences.length > this.maxSize) {
+      this.experiences.shift()
+    }
+
+    // Track successful configurations
+    if (reward > 0.7 && errorAfter < 2) {
+      this.successfulConfigs.push({
+        pid: pidAfter,
+        stability: state.stability,
+        error: errorAfter,
+        timestamp: Date.now()
+      })
+      if (this.successfulConfigs.length > 50) this.successfulConfigs.shift()
+    }
+  }
+
+  calculateReward(errorBefore, errorAfter) {
+    const improvement = errorBefore - errorAfter
+    if (errorAfter < 1) return 1.0
+    if (errorAfter < 2) return 0.8
+    if (improvement > 0) return 0.5 + (improvement / 20)
+    return Math.max(0, 0.3 - Math.abs(improvement) / 20)
+  }
+
+  getBestConfig(currentStability) {
+    const relevant = this.successfulConfigs.filter(c => 
+      c.stability === currentStability || c.error < 1
+    )
+    if (relevant.length === 0) return null
+    return relevant.reduce((best, c) => c.error < best.error ? c : best)
+  }
+
+  getRecentSuccesses(n = 5) {
+    return this.experiences
+      .filter(e => e.reward > 0.6)
+      .slice(-n)
+  }
+
+  getSummaryForPrompt() {
+    const recent = this.experiences.slice(-20)
+    if (recent.length < 5) return ""
+    
+    const avgReward = recent.reduce((s, e) => s + e.reward, 0) / recent.length
+    const successes = this.getRecentSuccesses()
+    const bestConfig = this.successfulConfigs[this.successfulConfigs.length - 1]
+    
+    let summary = `\nLEARNED FROM EXPERIENCE (${this.experiences.length} samples):\n`
+    summary += `- Recent avg reward: ${(avgReward * 100).toFixed(0)}%\n`
+    
+    if (bestConfig) {
+      summary += `- Best known config: Kp=${bestConfig.pid.kp.toFixed(2)}, Ki=${bestConfig.pid.ki.toFixed(3)}, Kd=${bestConfig.pid.kd.toFixed(2)} (error=${bestConfig.error.toFixed(2)})\n`
+    }
+    
+    if (successes.length > 0) {
+      summary += `- Recent successful adjustments:\n`
+      successes.forEach(s => {
+        summary += `  * ${s.action}: error ${s.errorBefore.toFixed(1)}→${s.errorAfter.toFixed(1)}\n`
+      })
+    }
+    
+    return summary
+  }
+}
+
 class AIControlAgent {
     constructor(instanceId = 1) {
         this.instanceId = instanceId;
@@ -279,6 +364,7 @@ class AIControlAgent {
         this.lastAction = null;
         this.actionHistory = [];
         this.maxHistory = 50;
+        this.memory = new ExperienceMemory()
         
         // PID parameters - START BAD so AI must tune them!
         // Good values would be ~2.0, 0.1, 0.5
@@ -295,6 +381,13 @@ class AIControlAgent {
         this.reasoningInterval = 3000; // Every 3 seconds for faster tuning
         this.lastReasoning = 0;
         this.lastReasoning_result = null;
+
+        // Tuning guardrails (prevents dithering near stability)
+        this.pidChangeCooldownMs = 8000;
+        this.lastPidChangeAt = 0;
+        this.maxPidStep = { kp: 0.5, ki: 0.03, kd: 0.5 };
+        this.stableDeadband = 1.0;
+        this.maxOscillationWhenStable = 0.2;
         
         // User instructions
         this.userInstructions = "";
@@ -382,8 +475,41 @@ class AIControlAgent {
         const oscillation = this.hallucinationTracker.calculateOscillation();
         const smoothness = this.hallucinationTracker.calculateSmoothness();
 
-        const prompt = `You are an AI PID controller tuning agent. Your PRIMARY GOAL is a SMOOTH line that follows the setpoint exactly.
+        // Handle explicit setpoint requests deterministically (keeps the demo responsive)
+        if (this.targetSetpoint !== null) {
+            const target = Math.max(0, Math.min(100, Number(this.targetSetpoint)));
+            if (!isNaN(target)) {
+                await this.changeSetpoint(target);
+            }
+            this.targetSetpoint = null;
+            this.lastReasoning_result = {
+                action: 'setpoint',
+                analysis: `Setpoint updated to ${target}.`,
+                pidChanged: false,
+                confidence: 90
+            };
+            return { toolUsed: 'setpoint', confidence: 90, riskStatus, reasoning: { action: 'setpoint', analysis: this.lastReasoning_result.analysis, confidence: 90 } };
+        }
 
+        const absError = Math.abs(Number(state.error));
+        const inDeadband = state.stability === 'STABLE' && absError <= this.stableDeadband && oscillation <= this.maxOscillationWhenStable;
+        const inPidCooldown = (now - this.lastPidChangeAt) < this.pidChangeCooldownMs;
+
+        // If we're already stable (or we just changed PID), avoid thrashing and let the loop settle
+        if (inDeadband || inPidCooldown) {
+            const analysis = inPidCooldown ? 'Holding PID parameters to let the loop settle.' : 'Stable within deadband; monitoring.';
+            this.lastReasoning_result = {
+                action: 'monitor',
+                analysis,
+                pidChanged: false,
+                confidence: 80
+            };
+            return { toolUsed: 'monitor', confidence: 80, riskStatus, reasoning: { action: 'monitor', analysis, confidence: 80 } };
+        }
+        const memorySummary = this.memory.getSummaryForPrompt()
+
+        const prompt = `You are an AI PID controller tuning agent. Your PRIMARY GOAL is a SMOOTH line that follows the setpoint exactly.
+${memorySummary}
 CURRENT METRICS:
 - Process Value: ${state.processValue.toFixed(2)}
 - Setpoint: ${state.setpoint}
@@ -420,7 +546,7 @@ ${smoothness < 0.5 ? "- LOW SMOOTHNESS: Balance all three parameters" : ""}
 ${Math.abs(avgError) > 5 ? "- HIGH ERROR: Increase Kp or Ki" : ""}
 ${state.stability === "STABLE" && smoothness > 0.7 ? "- GOOD: Minor tuning only" : ""}
 
-${needsTuning ? "ACTION NEEDED: Adjust PID parameters. Change AT LEAST Kp or Ki, not just Kd." : "System OK. Monitor or fine-tune."}
+${needsTuning ? "ACTION NEEDED: If needed, make a SMALL PID adjustment and then wait for the response." : "System OK. Monitor or fine-tune."}
 
 Respond ONLY with valid JSON:
 {
@@ -480,27 +606,48 @@ Respond ONLY with valid JSON:
             let confidence = reasoning.confidence || 50;
 
             // Apply PID changes if action is tune
+            const clamp = (v, min, max) => Math.max(min, Math.min(max, v));
+            const clampStep = (current, proposed, maxStep) => {
+                const delta = proposed - current;
+                if (!isFinite(delta)) return current;
+                if (Math.abs(delta) <= maxStep) return proposed;
+                return current + Math.sign(delta) * maxStep;
+            };
+
+            const inPidCooldown2 = (now - this.lastPidChangeAt) < this.pidChangeCooldownMs;
+            if (inPidCooldown2 && (reasoning.action === "tune" || reasoning.action === "adjust")) {
+                reasoning.action = "monitor";
+                reasoning.analysis = "Holding PID parameters to let the loop settle.";
+            }
+
             if (reasoning.action === "tune" || reasoning.action === "adjust") {
                 const oldPid = { kp: this.kp, ki: this.ki, kd: this.kd };
-                
-                if (reasoning.kp !== undefined && reasoning.kp !== this.kp) {
-                    this.kp = Math.max(0.1, Math.min(10, reasoning.kp));
-                    pidChanged = true;
+
+                const kpProposed = Number(reasoning.kp);
+                if (!isNaN(kpProposed) && kpProposed !== this.kp) {
+                    const stepped = clampStep(this.kp, kpProposed, this.maxPidStep.kp);
+                    this.kp = clamp(stepped, 0.1, 10);
                 }
-                if (reasoning.ki !== undefined && reasoning.ki !== this.ki) {
-                    this.ki = Math.max(0.01, Math.min(1, reasoning.ki));
-                    pidChanged = true;
+
+                const kiProposed = Number(reasoning.ki);
+                if (!isNaN(kiProposed) && kiProposed !== this.ki) {
+                    const stepped = clampStep(this.ki, kiProposed, this.maxPidStep.ki);
+                    this.ki = clamp(stepped, 0.01, 1);
                 }
-                if (reasoning.kd !== undefined && reasoning.kd !== this.kd) {
-                    this.kd = Math.max(0.1, Math.min(5, reasoning.kd));
-                    pidChanged = true;
+
+                const kdProposed = Number(reasoning.kd);
+                if (!isNaN(kdProposed) && kdProposed !== this.kd) {
+                    const stepped = clampStep(this.kd, kdProposed, this.maxPidStep.kd);
+                    this.kd = clamp(stepped, 0.1, 5);
                 }
-                
+
+                pidChanged = (this.kp !== oldPid.kp) || (this.ki !== oldPid.ki) || (this.kd !== oldPid.kd);
                 if (pidChanged) {
-                    logger.info("AI adjusted PID", { 
-                        old: oldPid, 
+                    this.lastPidChangeAt = now;
+                    logger.info("AI adjusted PID", {
+                        old: oldPid,
                         new: { kp: this.kp, ki: this.ki, kd: this.kd },
-                        reason: reasoning.analysis 
+                        reason: reasoning.analysis
                     });
                 }
             }
@@ -528,6 +675,15 @@ Respond ONLY with valid JSON:
                 ki: this.ki,
                 kd: this.kd
             });
+            this.memory.record(
+                state,
+                toolUsed,
+                { kp: oldPid?.kp || this.kp, ki: oldPid?.ki || this.ki, kd: oldPid?.kd || this.kd },
+                { kp: this.kp, ki: this.ki, kd: this.kd },
+                this.lastErrorForEval || state.error,
+                state.error
+            );
+
 
             this.lastConfidence = confidence;
             
@@ -1063,8 +1219,14 @@ Interpret this instruction and respond in JSON format:
             const data = await response.json();
             const interpretation = JSON.parse(data.response);
             
-            if (interpretation.targetSetpoint !== null) {
+            if (interpretation.targetSetpoint !== null && typeof interpretation.targetSetpoint === "number" && !isNaN(interpretation.targetSetpoint)) {
                 supervisor.currentAgent.targetSetpoint = interpretation.targetSetpoint;
+                // Apply setpoint immediately so the UI reflects the user's command without waiting for the agent loop
+                try {
+                    await supervisor.currentAgent.changeSetpoint(interpretation.targetSetpoint);
+                } catch (e) {
+                    // Non-fatal: agent loop will still converge on target
+                }
             }
             
             res.json({
@@ -1120,6 +1282,62 @@ app.get("/agent/status", (req, res) => {
     res.json(supervisor.currentAgent.getStatus());
 });
 
+
+// -------------------------------------------
+// Chat response shaping (resume-friendly brevity)
+// -------------------------------------------
+function extractSetpointFromMessage(message) {
+    if (!message) return null;
+    const m = String(message).match(/\b(\d{1,3}(?:\.\d+)?)\b/);
+    if (!m) return null;
+
+    const value = parseFloat(m[1]);
+    if (isNaN(value)) return null;
+
+    const lower = String(message).toLowerCase();
+    const looksLikeSetpoint =
+        lower.includes("setpoint") ||
+        lower.includes("target") ||
+        lower.includes("stabilize") ||
+        lower.includes("hold at") ||
+        lower.includes("go to") ||
+        lower.includes("track") ||
+        lower.includes("aim for");
+
+    if (!looksLikeSetpoint) return null;
+
+    // Clamp to demo range
+    return Math.max(0, Math.min(100, value));
+}
+
+function wantsLongFormExplanation(message) {
+    const lower = String(message || "").toLowerCase();
+    return /\b(explain|why|how|details|walk me through|teach|step by step|math)\b/.test(lower);
+}
+
+function stripMarkdownArtifacts(text) {
+    if (!text) return "";
+    return String(text)
+        .replace(/^#{1,6}\s+/gm, "")               // headings
+        .replace(/^\s*[-*+]\s+/gm, "")            // bullets
+        .replace(/`{1,3}/g, "")                     // code ticks
+        .replace(/\*\*(.*?)\*\*/g, "$1")        // bold
+        .replace(/\*(.*?)\*/g, "$1")              // italics
+        .trim();
+}
+
+function truncateAtSentenceBoundary(text, maxLen) {
+    const t = String(text || "").trim();
+    if (t.length <= maxLen) return t;
+
+    const cut = t.slice(0, maxLen);
+    const idx = Math.max(cut.lastIndexOf("."), cut.lastIndexOf("!"), cut.lastIndexOf("?"));
+    if (idx >= Math.min(120, maxLen - 1)) {
+        return cut.slice(0, idx + 1).trim();
+    }
+    return cut.trim() + "…";
+}
+
 // Chat with reasoning model about the control system
 app.post("/control/chat", async (req, res) => {
     const { message } = req.body;
@@ -1133,21 +1351,49 @@ app.post("/control/chat", async (req, res) => {
         const stateRes = await fetch(`${config.systemUrl}/system`);
         const state = await stateRes.json();
 
-        const systemPrompt = `You are an AI assistant explaining an unstable control system demonstration.
+        const longForm = wantsLongFormExplanation(message);
+        const requestedSetpoint = extractSetpointFromMessage(message);
+
+        // If the user is issuing a setpoint command, respond concisely (no tutoring) for a clean demo UX.
+        if (requestedSetpoint !== null && !longForm) {
+            const pv = typeof state.processValue === "number" ? state.processValue : Number(state.processValue);
+            const sp = typeof state.setpoint === "number" ? state.setpoint : Number(state.setpoint);
+            const err = typeof state.error === "number" ? state.error : Number(state.error);
+
+            const pvStr = isNaN(pv) ? "?" : pv.toFixed(2);
+            const spStr = isNaN(sp) ? "?" : sp.toFixed(2);
+            const errStr = isNaN(err) ? "?" : err.toFixed(2);
+
+            const agentOn = supervisor.currentAgent?.active ? "ON" : "OFF";
+            const responseText = `Setpoint set to ${requestedSetpoint}. PV ${pvStr}, SP ${spStr}, error ${errStr} (${state.stability}). Agent ${agentOn}.`;
+
+            return res.json({
+                response: responseText,
+                systemState: state,
+                agentStatus: supervisor.currentAgent.getStatus(),
+            });
+        }
+
+        const systemPrompt = `You are an AI assistant for a control-system demo on a professional portfolio site.
+
+Style rules (strict):
+- Default to concise, resume-friendly answers.
+- Plain text only (no markdown headings, no bullet lists).
+- If the user is not explicitly asking for an explanation, respond in 1-2 sentences.
+- If the user asks for "explain/how/why/details", you may use up to 6 short sentences.
 
 Current System State:
-- Process Value: ${state.processValue} (the actual value)
-- Setpoint: ${state.setpoint} (the target value)
-- Error: ${state.error} (difference from target)
+- Process Value: ${state.processValue}
+- Setpoint: ${state.setpoint}
+- Error: ${state.error}
 - Stability: ${state.stability}
 - Instability Rate: ${state.instabilityRate}
 - Agent Active: ${supervisor.currentAgent.active}
 - Agent PID: Kp=${supervisor.currentAgent.kp}, Ki=${supervisor.currentAgent.ki}, Kd=${supervisor.currentAgent.kd}
 
-The system naturally drifts and oscillates. An AI agent uses PID control to stabilize it.
-Users can increase instability, add disturbances, or tell the agent what setpoint to target.
+Context: The process naturally drifts/oscillates. The AI agent tunes PID to stabilize it.
 
-Be helpful and explain control systems concepts when relevant.`;
+If the user is giving a command (e.g., change setpoint), acknowledge succinctly and avoid tutorials unless asked.`;
 
         logger.info("Calling Ollama for chat", { model: config.model, url: config.ollamaUrl });
         
@@ -1159,6 +1405,11 @@ Be helpful and explain control systems concepts when relevant.`;
                 system: systemPrompt,
                 prompt: message,
                 stream: false,
+                options: {
+                    // Keep responses tight unless the user explicitly asks for detail
+                    num_predict: wantsLongFormExplanation(message) ? 256 : 120,
+                    temperature: 0.2
+                }
             }),
         });
 
@@ -1169,8 +1420,13 @@ Be helpful and explain control systems concepts when relevant.`;
         }
 
         const data = await response.json();
+        const longForm2 = wantsLongFormExplanation(message);
+        let shaped = stripMarkdownArtifacts(data.response);
+        shaped = shaped.replace(/\n{3,}/g, "\n\n");
+        shaped = longForm2 ? truncateAtSentenceBoundary(shaped, 900) : truncateAtSentenceBoundary(shaped, 320);
+
         res.json({
-            response: data.response,
+            response: shaped,
             systemState: state,
             agentStatus: supervisor.currentAgent.getStatus(),
         });

@@ -8,7 +8,13 @@ import { RotateCcw, Brain, Zap, AlertTriangle, Send, RefreshCw } from 'lucide-re
 export default function ControlSystem({ fullPage = false }) {
   const ref = useRef(null)
   const canvasRef = useRef(null)
+  const chatScrollRef = useRef(null)
+  const chatEndRef = useRef(null)
+  const userHasInteractedRef = useRef(false)
   const isInView = useInView(ref, { once: true, margin: '-100px' })
+  const lastPidRef = useRef(null)
+  const lastActionKeyRef = useRef(null)
+  const lastLogTimeRef = useRef(0)
   
   const [connected, setConnected] = useState(false)
   const [systemState, setSystemState] = useState({
@@ -27,15 +33,19 @@ export default function ControlSystem({ fullPage = false }) {
   const [chatInput, setChatInput] = useState('')
   const [isLoading, setIsLoading] = useState(false)
   const [aiDecisions, setAiDecisions] = useState([])
+  const [expandedChat, setExpandedChat] = useState(new Set())
 
   // WebSocket connection
   useEffect(() => {
     let ws = null
     let reconnectTimer = null
-    let lastAction = null
 
     const connect = () => {
-      const wsUrl = process.env.NEXT_PUBLIC_WS_URL || 'wss://api.louisbersine.com/ws'
+      const isLocal = typeof window !== 'undefined' && window.location.hostname === 'localhost'
+      const wsUrl = process.env.NEXT_PUBLIC_WS_URL || 
+        (isLocal ? 'ws://localhost:3000/ws' : 'wss://api.louisbersine.com/ws')
+      
+      console.log('Connecting to WebSocket:', wsUrl)
       ws = new WebSocket(wsUrl)
 
       ws.onopen = () => setConnected(true)
@@ -54,23 +64,42 @@ export default function ControlSystem({ fullPage = false }) {
           })
           
           // Track AI decisions
-          if (data.agent?.lastAction) {
-            const action = data.agent.lastAction
-            const actionKey = `${action.action}-${data.agent.kp}-${data.agent.ki}-${data.agent.kd}`
+          if (data.agent) {
+            const now = Date.now()
+            const kp = data.agent.kp ?? 0
+            const ki = data.agent.ki ?? 0
+            const kd = data.agent.kd ?? 0
+            const currentPid = `${kp.toFixed(3)}-${ki.toFixed(4)}-${kd.toFixed(3)}`
             
-            if (actionKey !== lastAction) {
-              lastAction = actionKey
+            // Check if PID actually changed
+            const pidChanged = lastPidRef.current !== null && lastPidRef.current !== currentPid
+            
+            // Get action info
+            const action = data.agent.lastAction
+            const actionKey = action ? `${action.action}-${(action.analysis || '').substring(0, 30)}` : null
+            const actionChanged = actionKey && actionKey !== lastActionKeyRef.current
+            
+            // Time-based logging (every 15s even if nothing changed)
+            const timeSinceLast = now - lastLogTimeRef.current
+            
+            // Decide whether to log
+            const shouldLog = pidChanged || actionChanged || timeSinceLast > 15000
+            
+            if (shouldLog && (pidChanged || action)) {
+              lastPidRef.current = currentPid
+              if (actionKey) lastActionKeyRef.current = actionKey
+              lastLogTimeRef.current = now
+              
               setAiDecisions(prev => {
                 const newDecision = {
-                  id: Date.now(),
+                  id: now,
                   time: new Date().toLocaleTimeString(),
-                  action: action.action,
-                  analysis: action.analysis,
-                  pidChanged: action.pidChanged,
-                  confidence: action.confidence,
-                  kp: data.agent.kp,
-                  ki: data.agent.ki,
-                  kd: data.agent.kd,
+                  action: pidChanged ? 'TUNE' : (action?.action?.toUpperCase() || 'UPDATE'),
+                  analysis: pidChanged 
+                    ? `Kp=${kp.toFixed(2)}, Ki=${ki.toFixed(3)}, Kd=${kd.toFixed(2)}`
+                    : (action?.analysis || 'System update'),
+                  pidChanged: pidChanged,
+                  kp, ki, kd,
                   error: data.error,
                   stability: data.stability
                 }
@@ -79,8 +108,15 @@ export default function ControlSystem({ fullPage = false }) {
                 return updated
               })
             }
+            
+            // Initialize lastPid on first message
+            if (lastPidRef.current === null) {
+              lastPidRef.current = currentPid
+            }
           }
-        } catch (e) {}
+        } catch (e) {
+          console.error('WS parse error:', e)
+        }
       }
 
       ws.onclose = () => {
@@ -98,6 +134,19 @@ export default function ControlSystem({ fullPage = false }) {
       if (ws) ws.close()
     }
   }, [])
+
+  // Auto-scroll chat only after user sends a message (not on mount or WS updates)
+  useEffect(() => {
+    // Only auto-scroll if user has sent a message
+    if (!userHasInteractedRef.current) return
+    
+    const scroller = chatScrollRef.current
+    if (!scroller) return
+    const distanceFromBottom = scroller.scrollHeight - scroller.scrollTop - scroller.clientHeight
+    if (distanceFromBottom < 80) {
+      scroller.scrollTop = scroller.scrollHeight
+    }
+  }, [chatMessages, isLoading])
 
   // Draw chart
   useEffect(() => {
@@ -137,10 +186,14 @@ export default function ControlSystem({ fullPage = false }) {
     drawLine(history.pv, '#00d4ff')
   }, [history])
 
+  const getApiUrl = () => {
+    const isLocal = typeof window !== 'undefined' && window.location.hostname === 'localhost'
+    return process.env.NEXT_PUBLIC_API_URL || (isLocal ? 'http://localhost:3000' : '/msg')
+  }
+
   const apiCall = async (endpoint, body = {}) => {
-    const apiUrl = process.env.NEXT_PUBLIC_API_URL || '/msg'
     try {
-      const res = await fetch(`${apiUrl}${endpoint}`, {
+      const res = await fetch(`${getApiUrl()}${endpoint}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(body)
@@ -159,9 +212,12 @@ export default function ControlSystem({ fullPage = false }) {
     setHistory({ pv: [], sp: [] })
     setChatMessages([{ type: 'system', text: 'System reset' }])
     setAiDecisions([])
+    lastPidRef.current = null
+    lastActionKeyRef.current = null
   }
   const resetPID = () => {
     apiCall('/agent/reset-pid')
+    lastPidRef.current = null
     setAiDecisions(prev => [{
       id: Date.now(),
       time: new Date().toLocaleTimeString(),
@@ -176,21 +232,20 @@ export default function ControlSystem({ fullPage = false }) {
   const sendChat = async () => {
     if (!chatInput.trim() || isLoading) return
     
+    userHasInteractedRef.current = true
     const message = chatInput.trim()
     setChatInput('')
     setChatMessages(prev => [...prev, { type: 'user', text: message }])
     setIsLoading(true)
 
     try {
-      const apiUrl = process.env.NEXT_PUBLIC_API_URL || '/msg'
-      
-      await fetch(`${apiUrl}/agent/instruct`, {
+      await fetch(`${getApiUrl()}/agent/instruct`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ instruction: message })
       })
       
-      const res = await fetch(`${apiUrl}/control/chat`, {
+      const res = await fetch(`${getApiUrl()}/control/chat`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ message })
@@ -207,6 +262,15 @@ export default function ControlSystem({ fullPage = false }) {
     }
     
     setIsLoading(false)
+  }
+
+  const toggleChatExpand = (index) => {
+    setExpandedChat(prev => {
+      const next = new Set(prev)
+      if (next.has(index)) next.delete(index)
+      else next.add(index)
+      return next
+    })
   }
 
   const getStatusColor = () => {
@@ -257,26 +321,11 @@ export default function ControlSystem({ fullPage = false }) {
         )}
 
         <motion.div
-          initial={{ opacity: 0, y: 20 }}
+          initial={fullPage ? false : { opacity: 0, y: 20 }}
           animate={isInView || fullPage ? { opacity: 1, y: 0 } : {}}
-          transition={{ duration: 0.6, delay: 0.2 }}
+          transition={{ duration: 0.3 }}
           className="glass-card"
-          style={{
-                  padding: '1.5rem',
-                  maxWidth: fullPage ? '100%' : 1400,
-                  margin: '0 auto',
-
-                  // NEW: make the card a height-constrained flex column
-                  display: 'flex',
-                  flexDirection: 'column',
-                  minHeight: 0,
-
-                  // Pick a real height constraint:
-                  // Full page: fill viewport (minus the section padding/header area)
-                  height: fullPage ? 'calc(100vh - 2rem)' : undefined,
-                  // Embedded: cap the demo so the panels can scroll
-                  maxHeight: fullPage ? undefined : '75vh',
-                }}
+          style={{ padding: '1.5rem', maxWidth: fullPage ? '100%' : 1400, margin: '0 auto' }}
         >
           {/* Header */}
           <div style={{
@@ -312,23 +361,14 @@ export default function ControlSystem({ fullPage = false }) {
             </div>
           </div>
 
-          {/* Main Layout: Left (controls) | Middle (chat) | Right (AI log) */}
+          {/* Main Layout */}
           <div style={{
-                  display: 'grid',
-                  gridTemplateColumns: '1fr 280px 240px',
-                  gap: '1rem',
-
-                  // FIX typo
-                  overflow: 'hidden',   // you had 'hi'
-
-                  // NEW: let this row take remaining height in the card
-                  flex: 1,
-                  minHeight: 0,
-                  alignItems: 'stretch',
-                }}
-              >
-                          
-            {/* LEFT COLUMN - All Controls */}
+            display: 'grid',
+            gridTemplateColumns: '1fr 280px 240px',
+            gap: '1rem',
+            alignItems: 'start'
+          }}>
+            {/* LEFT COLUMN */}
             <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
               {/* Chart */}
               <div style={{ background: 'rgba(0,0,0,0.3)', borderRadius: '10px', padding: '0.75rem' }}>
@@ -351,7 +391,6 @@ export default function ControlSystem({ fullPage = false }) {
 
               {/* Controls Row */}
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.5rem' }}>
-                {/* Chaos Controls */}
                 <div style={{ background: 'rgba(0,0,0,0.3)', borderRadius: '10px', padding: '0.75rem' }}>
                   <div className="mono" style={{ color: 'var(--text-tertiary)', fontSize: '0.6rem', marginBottom: '0.5rem' }}>CHAOS CONTROLS</div>
                   <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.35rem' }}>
@@ -362,24 +401,24 @@ export default function ControlSystem({ fullPage = false }) {
                   </div>
                 </div>
 
-                {/* Agent Status */}
                 <div style={{ background: 'rgba(0,0,0,0.3)', borderRadius: '10px', padding: '0.75rem' }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.4rem' }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
-                      <Brain size={14} style={{ color: '#00d4ff' }} />
-                      <span className="mono" style={{ color: 'var(--text-tertiary)', fontSize: '0.6rem' }}>AI #{systemState.agent?.instanceId || 1}</span>
+                      <Brain size={14} style={{ color: '#a855f7' }} />
+                      <span className="mono" style={{ color: 'var(--text-tertiary)', fontSize: '0.6rem' }}>AI AGENT</span>
                     </div>
                     <motion.button
                       onClick={toggleAgent}
                       whileTap={{ scale: 0.95 }}
                       style={{
-                        padding: '0.15rem 0.5rem',
-                        borderRadius: '4px',
+                        padding: '0.2rem 0.5rem',
                         border: 'none',
-                        background: systemState.agent?.active ? '#10b981' : '#374151',
-                        color: '#fff',
-                        fontSize: '0.6rem',
-                        cursor: 'pointer'
+                        borderRadius: '10px',
+                        fontSize: '0.55rem',
+                        fontWeight: 'bold',
+                        cursor: 'pointer',
+                        background: systemState.agent?.active ? '#10b98130' : '#ef444430',
+                        color: systemState.agent?.active ? '#10b981' : '#ef4444'
                       }}
                     >
                       {systemState.agent?.active ? 'ON' : 'OFF'}
@@ -389,14 +428,13 @@ export default function ControlSystem({ fullPage = false }) {
                     Kp={systemState.agent?.kp?.toFixed(2)} Ki={systemState.agent?.ki?.toFixed(3)} Kd={systemState.agent?.kd?.toFixed(2)}
                   </div>
                   <MiniButton onClick={resetPID} color="#fbbf24" style={{ width: '100%' }}>
-                    <RefreshCw size={10} /> Reset PID (Keep Learning)
+                    <RefreshCw size={10} /> Reset PID
                   </MiniButton>
                 </div>
               </div>
 
-              {/* Reliability + OPC-UA Row */}
+              {/* Bottom Row */}
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.5rem' }}>
-                {/* Reliability Monitor */}
                 <div style={{ background: 'rgba(0,0,0,0.3)', borderRadius: '10px', padding: '0.75rem' }}>
                   <div className="mono" style={{ color: 'var(--text-tertiary)', fontSize: '0.6rem', marginBottom: '0.4rem' }}>RELIABILITY</div>
                   <RiskGauge 
@@ -409,7 +447,6 @@ export default function ControlSystem({ fullPage = false }) {
                   </div>
                 </div>
 
-                {/* OPC-UA Tags */}
                 <div style={{ background: 'rgba(0,0,0,0.3)', borderRadius: '10px', padding: '0.75rem', fontFamily: 'JetBrains Mono, monospace', fontSize: '0.55rem' }}>
                   <div style={{ color: 'var(--text-tertiary)', marginBottom: '0.3rem' }}>// OPC-UA TAGS</div>
                   <div style={{ color: '#00d4ff' }}>PV: {systemState.processValue?.toFixed(1)}</div>
@@ -427,49 +464,59 @@ export default function ControlSystem({ fullPage = false }) {
               padding: '0.75rem',
               display: 'flex',
               flexDirection: 'column',
-              // height: '100%',
-              // minHeight: '420px',
-              // Critical: allow internal child to shrink + scroll
-              minHeight: 0,
-              minWidth: 0,
-
-              // Pick ONE: either a fixed height, or a parent with definite height
-              height: '100%',
-
-              // Do not scroll the whole panel
-              overflow: 'hidden'
+              height: '420px'
             }}>
               <div className="mono" style={{ color: 'var(--text-tertiary)', fontSize: '0.65rem', marginBottom: '0.5rem' }}>
                 CHAT WITH AGENT
               </div>
-              <div style={{
+              <div ref={chatScrollRef} style={{
                 flex: 1,
-                minHeight: 0,          // Critical
                 overflowY: 'auto',
                 overflowX: 'hidden',
                 marginBottom: '0.5rem',
-                fontSize: '0.75rem',
-
-                // Prevent long strings from widening the column and “pushing” layout
-                overflowWrap: 'anywhere',
-                wordBreak: 'break-word',
+                fontSize: '0.75rem'
               }}>
-                {chatMessages.map((msg, i) => (
-                  <div key={i} style={{
-                    padding: '0.4rem',
-                    marginBottom: '0.4rem',
-                    borderRadius: '6px',
-                    background: msg.type === 'user' ? 'rgba(0,212,255,0.1)' :
-                                msg.type === 'ai' ? 'rgba(255,255,255,0.05)' :
-                                'rgba(251,191,36,0.1)',
-                    color: msg.type === 'system' ? '#fbbf24' : 'var(--text-primary)'
-                  }}>
-                    {msg.text}
-                  </div>
-                ))}
+                {chatMessages.map((msg, i) => {
+                  const isAi = msg.type === 'ai'
+                  const isLong = isAi && (msg.text?.length || 0) > 360
+                  const expanded = expandedChat.has(i)
+                  const displayText = isLong && !expanded ? msg.text.substring(0, 360) + '...' : msg.text
+
+                  return (
+                    <div key={i} style={{
+                      padding: '0.4rem',
+                      marginBottom: '0.4rem',
+                      borderRadius: '6px',
+                      background: msg.type === 'user' ? 'rgba(0,212,255,0.1)' :
+                                  msg.type === 'ai' ? 'rgba(255,255,255,0.05)' :
+                                  'rgba(251,191,36,0.1)',
+                      color: msg.type === 'system' ? '#fbbf24' : 'var(--text-primary)',
+                      wordBreak: 'break-word'
+                    }}>
+                      <div style={{ whiteSpace: 'pre-wrap' }}>{displayText}</div>
+                      {isLong && (
+                        <button
+                          onClick={() => toggleChatExpand(i)}
+                          style={{
+                            marginTop: '0.25rem',
+                            background: 'none',
+                            border: 'none',
+                            color: '#00d4ff',
+                            fontSize: '0.65rem',
+                            cursor: 'pointer',
+                            padding: 0
+                          }}
+                        >
+                          {expanded ? 'Show less' : 'Show more'}
+                        </button>
+                      )}
+                    </div>
+                  )
+                })}
                 {isLoading && (
                   <div style={{ padding: '0.4rem', color: 'var(--text-tertiary)' }}>Thinking...</div>
                 )}
+                <div ref={chatEndRef} />
               </div>
               <div style={{ display: 'flex', gap: '0.4rem' }}>
                 <input
@@ -515,17 +562,7 @@ export default function ControlSystem({ fullPage = false }) {
               padding: '0.75rem',
               display: 'flex',
               flexDirection: 'column',
-              // height: '100%',
-              // minHeight: '420px',
-              // Critical: allow internal child to shrink + scroll
-              minHeight: 0,
-              minWidth: 0,
-
-              // Pick ONE: either a fixed height, or a parent with definite height
-              height: '100%',
-
-              // Do not scroll the whole panel
-              overflow: 'hidden'
+              height: '420px'
             }}>
               <div className="mono" style={{ color: '#a855f7', fontSize: '0.65rem', marginBottom: '0.5rem' }}>
                 AI TUNING LOG
@@ -543,12 +580,11 @@ export default function ControlSystem({ fullPage = false }) {
                       borderRadius: '4px',
                       background: d.pidChanged ? 'rgba(168,85,247,0.2)' : 'rgba(255,255,255,0.05)',
                       borderLeft: `3px solid ${d.pidChanged ? '#a855f7' : '#374151'}`,
-                      overflowWrap: 'anywhere',
-                      wordBreak: 'break-word',
+                      wordBreak: 'break-word'
                     }}>
                       <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.2rem' }}>
-                        <span style={{ color: '#a855f7', fontWeight: 'bold' }}>
-                          {d.action?.toUpperCase()}
+                        <span style={{ color: d.pidChanged ? '#a855f7' : '#888', fontWeight: 'bold' }}>
+                          {d.action}
                           {d.pidChanged && ' ✓'}
                         </span>
                         <span style={{ color: 'var(--text-tertiary)', fontSize: '0.55rem' }}>{d.time}</span>
