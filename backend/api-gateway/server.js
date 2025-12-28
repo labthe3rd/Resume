@@ -605,6 +605,9 @@ Respond ONLY with valid JSON:
             let toolUsed = reasoning.action || "monitor";
             let confidence = reasoning.confidence || 50;
 
+            // Store old PID before any changes
+            const oldPid = { kp: this.kp, ki: this.ki, kd: this.kd };
+
             // Apply PID changes if action is tune
             const clamp = (v, min, max) => Math.max(min, Math.min(max, v));
             const clampStep = (current, proposed, maxStep) => {
@@ -621,8 +624,6 @@ Respond ONLY with valid JSON:
             }
 
             if (reasoning.action === "tune" || reasoning.action === "adjust") {
-                const oldPid = { kp: this.kp, ki: this.ki, kd: this.kd };
-
                 const kpProposed = Number(reasoning.kp);
                 if (!isNaN(kpProposed) && kpProposed !== this.kp) {
                     const stepped = clampStep(this.kp, kpProposed, this.maxPidStep.kp);
@@ -678,7 +679,7 @@ Respond ONLY with valid JSON:
             this.memory.record(
                 state,
                 toolUsed,
-                { kp: oldPid?.kp || this.kp, ki: oldPid?.ki || this.ki, kd: oldPid?.kd || this.kd },
+                oldPid,
                 { kp: this.kp, ki: this.ki, kd: this.kd },
                 this.lastErrorForEval || state.error,
                 state.error
@@ -1470,38 +1471,325 @@ app.get("/ollama/health", async (req, res) => {
 });
 
 // ===========================================
-// WEBSOCKET FOR REAL-TIME UPDATES
+// TANK MONITORING AI AGENT
+// ===========================================
+
+class TankAnomalyDetector {
+    constructor() {
+        this.lastAnalysis = null;
+        this.lastAnalysisTime = 0;
+        this.analysisInterval = 2000; // Analyze every 2 seconds
+        this.anomalyStartTime = null;
+        this.escalationLevel = 0;
+    }
+
+    async analyzeState(tankState) {
+        const now = Date.now();
+        
+        // Check if we need to run AI analysis
+        if (now - this.lastAnalysisTime < this.analysisInterval) {
+            return this.lastAnalysis;
+        }
+        
+        this.lastAnalysisTime = now;
+        
+        const anomalies = tankState.anomalies || [];
+        const hasAnomaly = anomalies.length > 0;
+        
+        // Track anomaly duration for escalation
+        if (hasAnomaly) {
+            if (!this.anomalyStartTime) {
+                this.anomalyStartTime = now;
+            }
+            const duration = (now - this.anomalyStartTime) / 1000;
+            
+            if (duration >= 15) this.escalationLevel = 3;
+            else if (duration >= 10) this.escalationLevel = 2;
+            else if (duration >= 5) this.escalationLevel = 1;
+            else this.escalationLevel = 0;
+        } else {
+            this.anomalyStartTime = null;
+            this.escalationLevel = 0;
+        }
+        
+        // Only call LLM if there are anomalies
+        if (!hasAnomaly) {
+            this.lastAnalysis = {
+                status: 'NORMAL',
+                reasoning: 'All sensors operating within normal parameters.',
+                confidence: 100,
+                escalationLevel: 0,
+                anomalyDuration: 0
+            };
+            return this.lastAnalysis;
+        }
+        
+        // Build prompt for AI analysis - add /no_think for Qwen3
+        const prompt = `You are an OT security AI monitoring a liquid tank system. Analyze the following sensor readings for anomalies:
+
+Current State:
+- Liquid Level: ${tankState.liquidLevel}% (actual: ${tankState.actualLevel}%)
+- Filling: ${tankState.liquidFilling}
+- Direction: ${tankState.direction}
+- High Sensor: ${tankState.liquidHigh}
+- Low Sensor: ${tankState.liquidLow}
+
+Detected Anomalies:
+${anomalies.map(a => `- ${a.type}: ${a.message}`).join('\n')}
+
+Normal Operating Parameters:
+- Level should be 0-100%
+- High sensor triggers at ≥90%
+- Low sensor triggers at ≤20%
+- Sensors should match level thresholds
+
+Respond with ONLY 2-3 sentences analyzing what might be happening. Focus on: cyber attack, sensor failure, or calibration issue. /no_think`;
+
+        try {
+            const response = await fetch(`${config.ollamaUrl}/api/generate`, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                    model: config.model,
+                    prompt: prompt,
+                    stream: false,
+                    options: {
+                        num_predict: 200,
+                        temperature: 0.3
+                    }
+                }),
+            });
+
+            if (response.ok) {
+                const data = await response.json();
+                let rawResponse = data.response || '';
+                
+                // Strip Qwen3 thinking tags - handle all variations
+                let analysis = rawResponse;
+                
+                // Log raw response for debugging
+                const hadThinkTags = /<think>/i.test(analysis);
+                
+                // Remove <think>...</think> blocks (closed tags, multiline)
+                analysis = analysis.replace(/<think>[\s\S]*?<\/think>/gim, '');
+                
+                // Remove unclosed <think>... (model sometimes doesn't close them)
+                analysis = analysis.replace(/<think>[\s\S]*/gim, '');
+                
+                // Remove </think> if orphaned
+                analysis = analysis.replace(/<\/think>/gi, '');
+                
+                // Remove any remaining XML/HTML-like tags
+                analysis = analysis.replace(/<[^>]*>/g, '');
+                
+                // Remove common prefixes
+                analysis = analysis.replace(/^(Analysis:|Response:|Answer:|Output:|Assessment:)\s*/i, '');
+                
+                // Clean up whitespace
+                analysis = analysis.replace(/\s+/g, ' ').trim();
+                
+                // If still empty after cleaning, use fallback
+                if (!analysis || analysis.length < 10) {
+                    analysis = anomalies.map(a => a.message).join('. ');
+                }
+                
+                logger.info("Tank AI analysis", { 
+                    rawLength: rawResponse.length, 
+                    analysisLength: analysis.length,
+                    hadThinkTags: hadThinkTags,
+                    cleanedPreview: analysis.substring(0, 100)
+                });
+                
+                this.lastAnalysis = {
+                    status: 'ANOMALY',
+                    reasoning: analysis || `Anomaly detected: ${anomalies.map(a => a.type).join(', ')}`,
+                    confidence: this.calculateConfidence(anomalies),
+                    escalationLevel: this.escalationLevel,
+                    anomalyDuration: this.anomalyStartTime ? (now - this.anomalyStartTime) / 1000 : 0,
+                    anomalies: anomalies
+                };
+            } else {
+                this.lastAnalysis = {
+                    status: 'ANOMALY',
+                    reasoning: `Detected ${anomalies.length} anomaly(ies): ${anomalies.map(a => a.type).join(', ')}`,
+                    confidence: this.calculateConfidence(anomalies),
+                    escalationLevel: this.escalationLevel,
+                    anomalyDuration: this.anomalyStartTime ? (now - this.anomalyStartTime) / 1000 : 0,
+                    anomalies: anomalies
+                };
+            }
+        } catch (err) {
+            logger.error("Tank AI analysis error", { error: err.message });
+            this.lastAnalysis = {
+                status: 'ANOMALY',
+                reasoning: `System anomaly detected. ${anomalies.length} issue(s) found.`,
+                confidence: 70,
+                escalationLevel: this.escalationLevel,
+                anomalyDuration: this.anomalyStartTime ? (now - this.anomalyStartTime) / 1000 : 0,
+                anomalies: anomalies
+            };
+        }
+        
+        return this.lastAnalysis;
+    }
+    
+    calculateConfidence(anomalies) {
+        if (anomalies.length === 0) return 100;
+        const criticalCount = anomalies.filter(a => a.severity === 'CRITICAL').length;
+        const highCount = anomalies.filter(a => a.severity === 'HIGH').length;
+        return Math.max(60, 95 - (criticalCount * 15) - (highCount * 10));
+    }
+    
+    reset() {
+        this.lastAnalysis = null;
+        this.lastAnalysisTime = 0;
+        this.anomalyStartTime = null;
+        this.escalationLevel = 0;
+    }
+}
+
+const tankAI = new TankAnomalyDetector();
+
+// Tank API routes
+app.get("/tank", async (req, res) => {
+    try {
+        const response = await fetch(`${config.systemUrl}/tank`);
+        if (response.ok) {
+            const state = await response.json();
+            const analysis = await tankAI.analyzeState(state);
+            res.json({ tank: state, aiAnalysis: analysis });
+        } else {
+            res.status(502).json({ error: "Tank system unavailable" });
+        }
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+app.post("/tank/fault", async (req, res) => {
+    try {
+        const response = await fetch(`${config.systemUrl}/tank/fault`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(req.body)
+        });
+        if (response.ok) {
+            const state = await response.json();
+            res.json(state);
+        } else {
+            res.status(502).json({ error: "Tank system unavailable" });
+        }
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+app.post("/tank/reset", async (req, res) => {
+    try {
+        tankAI.reset();
+        const response = await fetch(`${config.systemUrl}/tank/reset`, {
+            method: "POST"
+        });
+        if (response.ok) {
+            const state = await response.json();
+            res.json(state);
+        } else {
+            res.status(502).json({ error: "Tank system unavailable" });
+        }
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// ===========================================
+// WEBSOCKET FOR REAL-TIME UPDATES (UNIFIED)
 // ===========================================
 
 const wss = new WebSocketServer({ server, path: "/ws" });
+let tankSimulationActive = false;
 
 wss.on("connection", (ws) => {
     clientConnected();
     
-    const interval = setInterval(async () => {
-        try {
-            const res = await fetch(`${config.systemUrl}/system`);
-            if (res.ok && ws.readyState === ws.OPEN) {
-                const state = await res.json();
-                ws.send(JSON.stringify({
-                    ...state,
-                    agent: supervisor.currentAgent?.getStatus() || {},
-                    supervisor: supervisor.getStatus()
-                }));
+    // Start tank simulation when first client connects
+    if (!tankSimulationActive) {
+        tankSimulationActive = true;
+        fetch(`${config.systemUrl}/tank/simulation/start`, { method: "POST" })
+            .then(res => res.json())
+            .then(data => logger.info("Tank simulation started", data))
+            .catch(err => logger.error("Failed to start tank simulation", { error: err.message }));
+    }
+    
+    // Sequential message queue
+    let running = true;
+    let tickCount = 0;
+    
+    const runLoop = async () => {
+        while (running && ws.readyState === ws.OPEN) {
+            try {
+                // System update every tick (10Hz)
+                const sysRes = await fetch(`${config.systemUrl}/system`);
+                if (sysRes.ok && ws.readyState === ws.OPEN) {
+                    const state = await sysRes.json();
+                    ws.send(JSON.stringify({
+                        type: 'system',
+                        ...state,
+                        agent: supervisor.currentAgent?.getStatus() || {},
+                        supervisor: supervisor.getStatus()
+                    }));
+                }
+                
+                // Tank update every 10th tick (1Hz)
+                if (tickCount % 10 === 0) {
+                    const tankRes = await fetch(`${config.systemUrl}/tank`);
+                    if (tankRes.ok && ws.readyState === ws.OPEN) {
+                        const state = await tankRes.json();
+                        const analysis = await tankAI.analyzeState(state);
+                        ws.send(JSON.stringify({
+                            type: 'tank',
+                            tank: state,
+                            aiAnalysis: analysis,
+                            anomalyState: {
+                                hasAnomaly: state.hasAnomaly,
+                                escalationLevel: analysis.escalationLevel,
+                                anomalyDuration: analysis.anomalyDuration
+                            }
+                        }));
+                    }
+                }
+                
+                tickCount++;
+                
+                // Wait 100ms before next iteration
+                await new Promise(resolve => setTimeout(resolve, 100));
+            } catch (err) {
+                // Ignore fetch errors, continue loop
             }
-        } catch {
-            // Ignore
         }
-    }, 100);
+    };
+    
+    runLoop();
     
     ws.on("close", () => {
-        clearInterval(interval);
+        running = false;
         clientDisconnected();
+        
+        // Stop tank simulation when no clients
+        if (wss.clients.size === 0) {
+            tankSimulationActive = false;
+            fetch(`${config.systemUrl}/tank/simulation/stop`, { method: "POST" })
+                .catch(err => logger.error("Failed to stop tank simulation", { error: err.message }));
+        }
     });
     
     ws.on("error", () => {
-        clearInterval(interval);
+        running = false;
         clientDisconnected();
+        
+        if (wss.clients.size === 0) {
+            tankSimulationActive = false;
+            fetch(`${config.systemUrl}/tank/simulation/stop`, { method: "POST" }).catch(() => {});
+        }
     });
 });
 

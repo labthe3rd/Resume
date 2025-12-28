@@ -183,6 +183,264 @@ class UnstableSystem {
 const system = new UnstableSystem();
 
 // ===========================================
+// LIQUID TANK SIMULATION
+// ===========================================
+
+class LiquidTankSystem {
+    constructor() {
+        // OPC-UA Tags
+        this.liquidFilling = true;
+        this.liquidLevel = 0.0;
+        this.liquidLow = true;
+        this.liquidHigh = false;
+        
+        // Simulation parameters
+        this.direction = 'up'; // 'up' or 'down'
+        this.cycleDuration = 120000; // 120 seconds per direction
+        this.lastDirectionChange = Date.now();
+        
+        // Fault injection states
+        this.faults = {
+            highSensorDisabled: false,
+            lowSensorDisabled: false,
+            highSensorForcedOn: false,
+            lowSensorForcedOn: false,
+            levelForceNegative: false,
+            levelForceZero: false,
+            levelLocked: false,
+            fillingPaused: false
+        };
+        
+        // Store actual values before faults
+        this.actualLevel = 0.0;
+        this.lockedValue = null;
+        
+        // Anomaly tracking
+        this.anomalyHistory = [];
+        this.maxAnomalyHistory = 100;
+    }
+    
+    update() {
+        const now = Date.now();
+        const elapsed = now - this.lastDirectionChange;
+        
+        // Calculate level based on cycle time (0-100 over 120 seconds)
+        if (!this.faults.levelLocked && !this.faults.fillingPaused) {
+            const progress = Math.min(elapsed / this.cycleDuration, 1.0);
+            
+            if (this.direction === 'up') {
+                this.actualLevel = progress * 100;
+            } else {
+                this.actualLevel = 100 - (progress * 100);
+            }
+            
+            // Switch direction at cycle end
+            if (progress >= 1.0) {
+                this.direction = this.direction === 'up' ? 'down' : 'up';
+                this.lastDirectionChange = now;
+            }
+        } else if (this.faults.fillingPaused) {
+            // Keep updating the lastDirectionChange so resuming works correctly
+            this.lastDirectionChange = now - (this.actualLevel / 100 * this.cycleDuration);
+        }
+        
+        // Apply fault injections to displayed values
+        this.applyFaults();
+        
+        // Update sensor states based on level (with fault overrides)
+        this.updateSensorStates();
+        
+        // Detect anomalies
+        this.detectAnomalies();
+        
+        return this.getState();
+    }
+    
+    applyFaults() {
+        // Start with actual level
+        let displayLevel = this.actualLevel;
+        
+        // Apply level faults
+        if (this.faults.levelForceNegative) {
+            displayLevel = -10;
+        } else if (this.faults.levelForceZero) {
+            displayLevel = 0;
+        } else if (this.faults.levelLocked) {
+            displayLevel = this.lockedValue !== null ? this.lockedValue : this.actualLevel;
+        }
+        
+        this.liquidLevel = displayLevel;
+        this.liquidFilling = this.direction === 'up' && !this.faults.levelLocked;
+    }
+    
+    updateSensorStates() {
+        // Calculate what sensors SHOULD show
+        const shouldBeHigh = this.actualLevel >= 90;
+        const shouldBeLow = this.actualLevel <= 20;
+        
+        // Apply sensor faults
+        if (this.faults.highSensorDisabled) {
+            this.liquidHigh = false;
+        } else if (this.faults.highSensorForcedOn) {
+            this.liquidHigh = true;
+        } else {
+            this.liquidHigh = shouldBeHigh;
+        }
+        
+        if (this.faults.lowSensorDisabled) {
+            this.liquidLow = false;
+        } else if (this.faults.lowSensorForcedOn) {
+            this.liquidLow = true;
+        } else {
+            this.liquidLow = shouldBeLow;
+        }
+    }
+    
+    detectAnomalies() {
+        const anomalies = [];
+        const now = Date.now();
+        
+        // Check for impossible states
+        
+        // 1. High sensor on when level is low
+        if (this.liquidHigh && this.actualLevel < 85) {
+            anomalies.push({
+                type: 'SENSOR_MISMATCH',
+                severity: 'HIGH',
+                message: 'High sensor active but level below threshold',
+                details: { sensor: 'HIGH', actualLevel: this.actualLevel }
+            });
+        }
+        
+        // 2. Low sensor on when level is high
+        if (this.liquidLow && this.actualLevel > 25) {
+            anomalies.push({
+                type: 'SENSOR_MISMATCH',
+                severity: 'HIGH',
+                message: 'Low sensor active but level above threshold',
+                details: { sensor: 'LOW', actualLevel: this.actualLevel }
+            });
+        }
+        
+        // 3. High sensor NOT on when level is high (should trigger)
+        if (!this.liquidHigh && this.actualLevel >= 92) {
+            anomalies.push({
+                type: 'SENSOR_FAILURE',
+                severity: 'CRITICAL',
+                message: 'High sensor not triggering at high level',
+                details: { sensor: 'HIGH', actualLevel: this.actualLevel }
+            });
+        }
+        
+        // 4. Low sensor NOT on when level is low (should trigger)
+        if (!this.liquidLow && this.actualLevel <= 18) {
+            anomalies.push({
+                type: 'SENSOR_FAILURE',
+                severity: 'CRITICAL',
+                message: 'Low sensor not triggering at low level',
+                details: { sensor: 'LOW', actualLevel: this.actualLevel }
+            });
+        }
+        
+        // 5. Negative level (impossible)
+        if (this.liquidLevel < 0) {
+            anomalies.push({
+                type: 'IMPOSSIBLE_VALUE',
+                severity: 'CRITICAL',
+                message: 'Negative liquid level detected',
+                details: { displayedLevel: this.liquidLevel }
+            });
+        }
+        
+        // 6. Level stuck (not changing while filling/draining should happen)
+        if (this.faults.levelLocked || this.faults.levelForceZero) {
+            anomalies.push({
+                type: 'STUCK_VALUE',
+                severity: 'MEDIUM',
+                message: 'Level value appears stuck',
+                details: { displayedLevel: this.liquidLevel }
+            });
+        }
+        
+        // Record anomaly history
+        if (anomalies.length > 0) {
+            this.anomalyHistory.push({
+                timestamp: now,
+                anomalies: anomalies
+            });
+            if (this.anomalyHistory.length > this.maxAnomalyHistory) {
+                this.anomalyHistory.shift();
+            }
+        }
+        
+        return anomalies;
+    }
+    
+    setFault(type, value) {
+        if (type in this.faults) {
+            // If locking level, store current value
+            if (type === 'levelLocked' && value) {
+                this.lockedValue = this.liquidLevel;
+            }
+            this.faults[type] = value;
+            logger.info("Tank fault set", { type, value });
+        }
+    }
+    
+    reset() {
+        this.liquidFilling = true;
+        this.liquidLevel = 0.0;
+        this.liquidLow = true;
+        this.liquidHigh = false;
+        this.direction = 'up';
+        this.lastDirectionChange = Date.now();
+        this.actualLevel = 0.0;
+        this.lockedValue = null;
+        this.faults = {
+            highSensorDisabled: false,
+            lowSensorDisabled: false,
+            highSensorForcedOn: false,
+            lowSensorForcedOn: false,
+            levelForceNegative: false,
+            levelForceZero: false,
+            levelLocked: false,
+            fillingPaused: false
+        };
+        this.anomalyHistory = [];
+        logger.info("Tank system reset");
+    }
+    
+    getState() {
+        const currentAnomalies = this.detectAnomalies();
+        
+        return {
+            liquidFilling: this.liquidFilling,
+            liquidLevel: Math.round(this.liquidLevel * 100) / 100,
+            liquidLow: this.liquidLow,
+            liquidHigh: this.liquidHigh,
+            direction: this.direction,
+            actualLevel: Math.round(this.actualLevel * 100) / 100,
+            faults: { ...this.faults },
+            anomalies: currentAnomalies,
+            hasAnomaly: currentAnomalies.length > 0,
+            timestamp: Date.now()
+        };
+    }
+    
+    getAnomalyState() {
+        const anomalies = this.detectAnomalies();
+        return {
+            hasAnomaly: anomalies.length > 0,
+            anomalies: anomalies,
+            recentHistory: this.anomalyHistory.slice(-10)
+        };
+    }
+}
+
+// Global tank instance
+const tankSystem = new LiquidTankSystem();
+
+// ===========================================
 // CLIENT-AWARE SIMULATION LOOP
 // ===========================================
 let simulationInterval = null;
@@ -221,6 +479,29 @@ function clientDisconnected() {
         stopSimulation();
     }
     logger.info("Client disconnected", { total: connectedClients });
+}
+
+// ===========================================
+// TANK SIMULATION CONTROL
+// ===========================================
+let tankConnectedClients = 0;
+let tankSimulationInterval = null;
+
+function startTankSimulation() {
+    if (tankSimulationInterval) return;
+    logger.info("Tank simulation started - clients connected");
+    tankSimulationInterval = setInterval(() => {
+        tankSystem.update();
+    }, 100);
+}
+
+function stopTankSimulation() {
+    if (tankSimulationInterval) {
+        clearInterval(tankSimulationInterval);
+        tankSimulationInterval = null;
+        tankSystem.reset();
+        logger.info("Tank simulation stopped and reset - no clients");
+    }
 }
 
 // ===========================================
@@ -287,6 +568,50 @@ app.post("/system/agent", (req, res) => {
     const { active } = req.body;
     system.toggleAgent(active);
     res.json(system.getState());
+});
+
+// ===========================================
+// TANK SYSTEM HTTP ROUTES
+// ===========================================
+
+app.get("/tank", (req, res) => {
+    res.json(tankSystem.getState());
+});
+
+app.get("/tank/anomalies", (req, res) => {
+    res.json(tankSystem.getAnomalyState());
+});
+
+app.post("/tank/fault", (req, res) => {
+    const { type, value } = req.body;
+    if (type) {
+        tankSystem.setFault(type, value);
+    }
+    res.json(tankSystem.getState());
+});
+
+app.post("/tank/reset", (req, res) => {
+    tankSystem.reset();
+    res.json(tankSystem.getState());
+});
+
+// Tank simulation control via HTTP (for api-gateway)
+app.post("/tank/simulation/start", (req, res) => {
+    tankConnectedClients++;
+    if (tankConnectedClients === 1) {
+        startTankSimulation();
+    }
+    logger.info("Tank HTTP client connected", { total: tankConnectedClients });
+    res.json({ simulation: tankSimulationInterval ? "running" : "paused", clients: tankConnectedClients });
+});
+
+app.post("/tank/simulation/stop", (req, res) => {
+    tankConnectedClients = Math.max(0, tankConnectedClients - 1);
+    if (tankConnectedClients === 0) {
+        stopTankSimulation();
+    }
+    logger.info("Tank HTTP client disconnected", { total: tankConnectedClients });
+    res.json({ simulation: tankSimulationInterval ? "running" : "paused", clients: tankConnectedClients });
 });
 
 // Simulation control via HTTP (for api-gateway)
@@ -401,6 +726,50 @@ async function createOPCUAServer() {
         nodeId: "ns=1;s=Error",
         dataType: DataType.Double,
         value: { get: () => new Variant({ dataType: DataType.Double, value: Math.abs(system.setpoint - system.processValue) }) },
+    });
+
+    // ===========================================
+    // LIQUID TANK OPC-UA VARIABLES
+    // ===========================================
+    
+    const tankFolder = namespace.addFolder(addressSpace.rootFolder.objects, {
+        browseName: "LiquidTank",
+    });
+    
+    // LiquidFilling (BOOL)
+    namespace.addVariable({
+        componentOf: tankFolder,
+        browseName: "LiquidFilling",
+        nodeId: "ns=1;s=LiquidFilling",
+        dataType: DataType.Boolean,
+        value: { get: () => new Variant({ dataType: DataType.Boolean, value: tankSystem.liquidFilling }) },
+    });
+    
+    // LiquidLevel (REAL)
+    namespace.addVariable({
+        componentOf: tankFolder,
+        browseName: "LiquidLevel",
+        nodeId: "ns=1;s=LiquidLevel",
+        dataType: DataType.Double,
+        value: { get: () => new Variant({ dataType: DataType.Double, value: tankSystem.liquidLevel }) },
+    });
+    
+    // LiquidLow (BOOL)
+    namespace.addVariable({
+        componentOf: tankFolder,
+        browseName: "LiquidLow",
+        nodeId: "ns=1;s=LiquidLow",
+        dataType: DataType.Boolean,
+        value: { get: () => new Variant({ dataType: DataType.Boolean, value: tankSystem.liquidLow }) },
+    });
+    
+    // LiquidHigh (BOOL)
+    namespace.addVariable({
+        componentOf: tankFolder,
+        browseName: "LiquidHigh",
+        nodeId: "ns=1;s=LiquidHigh",
+        dataType: DataType.Boolean,
+        value: { get: () => new Variant({ dataType: DataType.Boolean, value: tankSystem.liquidHigh }) },
     });
 
     await server.start();

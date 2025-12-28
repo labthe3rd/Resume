@@ -11,8 +11,8 @@ import Experience from '../components/Experience'
 import Projects from '../components/Projects'
 import Contact from '../components/Contact'
 import Footer from '../components/Footer'
-import Playground from '../components/Playground'
 import ControlSystem from '../components/ControlSystem'
+import LiquidTankMonitor from '../components/LiquidTankMonitor'
 import Chatbot from '../components/Chatbot'
 
 const Scene3D = dynamic(() => import('../components/Scene3D'), { ssr: false })
@@ -28,7 +28,7 @@ export default function Home() {
 
   useEffect(() => {
     const handleScroll = () => {
-      const sections = ['hero', 'about', 'skills', 'experience', 'projects', 'playground', 'control-system', 'contact']
+      const sections = ['hero', 'about', 'skills', 'experience', 'projects', 'tank-monitor', 'control-system', 'contact']
       const scrollPosition = window.scrollY + window.innerHeight / 3
 
       for (const section of sections) {
@@ -112,7 +112,7 @@ export default function Home() {
         <Skills />
         <Experience />
         <Projects />
-        <Playground />
+        <LiquidTankMonitor />
         <ControlSystem />
         <Contact />
         <Footer />

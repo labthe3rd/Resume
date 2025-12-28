@@ -9,6 +9,8 @@
     "lint": "next lint"
   },
   "dependencies": {
+    "@heroui/dropdown": "^2.3.29",
+    "@heroui/react": "^2.8.7",
     "@react-three/drei": "^9",
     "@react-three/fiber": "^8",
     "framer-motion": "^11",

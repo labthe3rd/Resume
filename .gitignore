@@ -48,3 +48,8 @@ Dockerfile
 #Do not upload bacckend
 bacckend
 bacckend/*
+
+.claude
+.claude/*
+
+*.zip

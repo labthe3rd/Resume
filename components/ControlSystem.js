@@ -43,7 +43,7 @@ export default function ControlSystem({ fullPage = false }) {
     const connect = () => {
       const isLocal = typeof window !== 'undefined' && window.location.hostname === 'localhost'
       const wsUrl = process.env.NEXT_PUBLIC_WS_URL || 
-        (isLocal ? 'ws://localhost:3000/ws' : 'wss://api.louisbersine.com/ws')
+        (isLocal ? 'ws://localhost:3101/ws' : 'wss://api.louisbersine.com/ws')
       
       console.log('Connecting to WebSocket:', wsUrl)
       ws = new WebSocket(wsUrl)
@@ -53,6 +53,10 @@ export default function ControlSystem({ fullPage = false }) {
       ws.onmessage = (event) => {
         try {
           const data = JSON.parse(event.data)
+          
+          // Only handle system messages
+          if (data.type !== 'system') return
+          
           setSystemState(data)
           
           setHistory(prev => {
@@ -305,9 +309,28 @@ export default function ControlSystem({ fullPage = false }) {
             <h2 className="section-title">
               AI <span className="gradient-text">Control System</span>
             </h2>
-            <p style={{ color: 'var(--text-secondary)', maxWidth: '600px' }}>
+            <p style={{ color: 'var(--text-secondary)', maxWidth: '600px', marginBottom: '1rem' }}>
               Watch an AI agent tune PID parameters in real-time to stabilize an unstable process.
             </p>
+            
+            {/* Problem & Value Description */}
+            <div style={{
+              background: 'rgba(0,212,255,0.05)',
+              border: '1px solid rgba(0,212,255,0.2)',
+              borderRadius: '10px',
+              padding: '1rem',
+              maxWidth: '800px'
+            }}>
+              <div style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', lineHeight: 1.6 }}>
+                <strong style={{ color: '#a855f7' }}>Problem:</strong> Industrial processes like chemical reactors, HVAC systems, and manufacturing lines require constant PID tuning. Operators spend hours manually adjusting parameters, and poorly tuned systems waste energy, produce defects, or become unstable.
+              </div>
+              <div style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', lineHeight: 1.6, marginTop: '0.5rem' }}>
+                <strong style={{ color: '#10b981' }}>Solution:</strong> An AI agent monitors process behavior and automatically adjusts PID gains (Kp, Ki, Kd) based on error trends, stability metrics, and historical performance. The agent explains its reasoning in natural language.
+              </div>
+              <div style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', lineHeight: 1.6, marginTop: '0.5rem' }}>
+                <strong style={{ color: '#fbbf24' }}>Business Value:</strong> Auto-tuning reduces commissioning time from days to hours. Major automation vendors offer premium advanced control modules for this capability. Even small efficiency improvements in industrial processes translate to significant cost savings in energy and materials.
+              </div>
+            </div>
           </motion.div>
         )}
 
