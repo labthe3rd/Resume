@@ -7,7 +7,7 @@ const nextConfig = {
   async rewrites() {
     return [
       {
-        source: '/api/:path*',
+        source: '/msg/:path*',
         destination: 'https://api.louisbersine.com/:path*',
       },
     ]
