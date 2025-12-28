@@ -44,7 +44,6 @@ export default function ControlSystem({ fullPage = false }) {
       const isLocal = typeof window !== 'undefined' && window.location.hostname === 'localhost'
       const wsUrl = process.env.NEXT_PUBLIC_WS_URL || 
         (isLocal ? 'ws://localhost:3101/ws' : 'wss://api.louisbersine.com/ws')
-
       
       console.log('Connecting to WebSocket:', wsUrl)
       ws = new WebSocket(wsUrl)
