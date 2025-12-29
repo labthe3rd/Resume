@@ -53,3 +53,7 @@ bacckend/*
 .claude/*
 
 *.zipbackend/
+
+*.png
+test-results/
+tests/
