@@ -3,7 +3,8 @@
 import { motion } from 'framer-motion'
 import { useInView } from 'framer-motion'
 import { useRef, useState, useEffect, useCallback } from 'react'
-import { 
+import { useWebSocket } from '../contexts/WebSocketContext'
+import {
   AlertTriangle, 
   Bell, 
   BellOff, 
@@ -20,7 +21,11 @@ import {
   Eye,
   EyeOff,
   Minus,
-  RefreshCw
+  RefreshCw,
+  Brain,
+  Shield,
+  Zap,
+  TrendingUp
 } from 'lucide-react'
 
 export default function LiquidTankMonitor({ fullPage = false }) {
@@ -66,6 +71,8 @@ export default function LiquidTankMonitor({ fullPage = false }) {
     { type: 'system', text: 'AI Monitor initialized. Watching for unusual activity...' }
   ])
   const [aiAnalysis, setAiAnalysis] = useState(null)
+  const [hallucination, setHallucination] = useState(null)
+  const [supervisorStatus, setSupervisorStatus] = useState(null)
   const triggeredLevelsRef = useRef(new Set())
 
   const volumeEnabledRef = useRef(false)
@@ -233,69 +240,127 @@ export default function LiquidTankMonitor({ fullPage = false }) {
     }
   }
 
-  // WebSocket connection
+  // Use shared WebSocket context
+  const { connected: wsConnected, tankData } = useWebSocket()
+
+  // Update connection status from context
   useEffect(() => {
-    let ws = null
-    let reconnectTimer = null
+    setConnected(wsConnected)
+    if (wsConnected) {
+      setChatMessages(prev => [...prev, { type: 'system', text: 'Connected to tank monitoring system.' }])
+    }
+  }, [wsConnected])
 
-    const connect = () => {
-      const isLocal = typeof window !== 'undefined' && window.location.hostname === 'localhost'
-      const wsUrl = process.env.NEXT_PUBLIC_WS_URL || 
-        (isLocal ? 'ws://localhost:3101/ws' : 'wss://api.louisbersine.com/ws')
-      
-      console.log('Connecting to WebSocket:', wsUrl)
-      ws = new WebSocket(wsUrl)
+  // Handle tank data updates from context
+  useEffect(() => {
+    if (!tankData) return
 
-      ws.onopen = () => {
-        setConnected(true)
-        setChatMessages(prev => [...prev, { type: 'system', text: 'Connected to tank monitoring system.' }])
+    const tankStateData = tankData.tank || tankData
+    setTankState(tankStateData)
+
+    // Sync faults from server state
+    if (tankStateData.faults) {
+      setFaults(prev => ({
+        ...prev,
+        ...tankStateData.faults
+      }))
+    }
+
+    if (tankData.aiAnalysis) {
+      setAiAnalysis(tankData.aiAnalysis)
+    }
+
+    if (tankData.hallucination) {
+      setHallucination(tankData.hallucination)
+    }
+
+    if (tankData.supervisor) {
+      setSupervisorStatus(tankData.supervisor)
+    }
+
+    // Handle anomaly updates directly inline to avoid forward reference
+    if (tankData.anomalyState) {
+      const anomalyState = tankData.anomalyState
+      const currentAiAnalysis = tankData.aiAnalysis
+
+      if (alarmState.alarmDisabled) {
+        return
       }
 
-      ws.onmessage = (event) => {
-        try {
-          const data = JSON.parse(event.data)
-          
-          // Only handle tank messages
-          if (data.type !== 'tank') return
-          
-          const tankData = data.tank || data
-          setTankState(tankData)
-          
-          // Sync faults from server state
-          if (tankData.faults) {
-            setFaults(prev => ({
+      const now = Date.now()
+
+      if (anomalyState.hasAnomaly) {
+        setAlarmState(prev => {
+          const startTime = prev.anomalyStartTime || now
+          const duration = (now - startTime) / 1000
+
+          let newLevel = 0
+          if (duration >= 15) newLevel = 3
+          else if (duration >= 10) newLevel = 2
+          else if (duration >= 5) newLevel = 1
+
+          if (newLevel > prev.escalationLevel && !triggeredLevelsRef.current.has(newLevel)) {
+            console.log('Triggering escalation level:', newLevel)
+            triggeredLevelsRef.current.add(newLevel)
+
+            if (newLevel === 1) {
+              setChatMessages(msgs => [...msgs, {
+                type: 'alert',
+                text: '⚠️ HMI ALERT: Unusual activity detected! Displaying warning on operator screen.'
+              }])
+            } else if (newLevel === 2) {
+              setChatMessages(msgs => [...msgs, {
+                type: 'alert',
+                text: '📧 EMAIL/SMS SENT: Notifying maintenance team of persistent anomaly.'
+              }])
+            } else if (newLevel === 3) {
+              setChatMessages(msgs => [...msgs, {
+                type: 'alert',
+                text: '📞 PHONE CALL INITIATED: Critical situation - calling supervisor.'
+              }])
+
+              let ttsMessage = 'Critical alert! Unusual activity detected in liquid tank system.'
+              if (currentAiAnalysis?.reasoning && currentAiAnalysis.reasoning !== 'Analysis unavailable') {
+                let cleanReasoning = currentAiAnalysis.reasoning
+                cleanReasoning = cleanReasoning.replace(/<think>[\s\S]*?<\/think>/gim, '')
+                cleanReasoning = cleanReasoning.replace(/<think>[\s\S]*/gim, '')
+                cleanReasoning = cleanReasoning.replace(/<\/think>/gi, '')
+                cleanReasoning = cleanReasoning.replace(/<[^>]*>/g, '')
+                cleanReasoning = cleanReasoning.replace(/^(Analysis:|Response:|Answer:|Output:|Assessment:)\s*/i, '')
+                cleanReasoning = cleanReasoning.replace(/\s+/g, ' ').trim()
+                if (cleanReasoning && cleanReasoning.length > 5) {
+                  ttsMessage += ` ${cleanReasoning}`
+                }
+              }
+              ttsMessage += ' Supervisor notification initiated.'
+              speak(ttsMessage)
+            }
+          }
+
+          return {
+            ...prev,
+            anomalyDetected: true,
+            anomalyStartTime: startTime,
+            escalationLevel: newLevel
+          }
+        })
+      } else {
+        setAlarmState(prev => {
+          if (prev.anomalyDetected) {
+            console.log('Anomaly resolved, clearing escalation')
+            triggeredLevelsRef.current.clear()
+            return {
               ...prev,
-              ...tankData.faults
-            }))
+              anomalyDetected: false,
+              anomalyStartTime: null,
+              escalationLevel: 0
+            }
           }
-          
-          if (data.aiAnalysis) {
-            setAiAnalysis(data.aiAnalysis)
-          }
-          
-          if (data.anomalyState) {
-            handleAnomalyUpdate(data.anomalyState, data.aiAnalysis)
-          }
-        } catch (e) {
-          console.error('WS parse error:', e)
-        }
+          return prev
+        })
       }
-
-      ws.onclose = () => {
-        setConnected(false)
-        reconnectTimer = setTimeout(connect, 2000)
-      }
-
-      ws.onerror = () => ws.close()
     }
-
-    connect()
-
-    return () => {
-      if (reconnectTimer) clearTimeout(reconnectTimer)
-      if (ws) ws.close()
-    }
-  }, [])
+  }, [tankData, alarmState.alarmDisabled, speak])
 
   // Handle anomaly updates and escalation
   const handleAnomalyUpdate = useCallback((anomalyState, currentAiAnalysis) => {
@@ -381,15 +446,20 @@ export default function LiquidTankMonitor({ fullPage = false }) {
         }
       })
     } else {
-      // Clear triggered levels when anomaly resolves
-      console.log('Anomaly resolved, clearing escalation')
-      triggeredLevelsRef.current.clear()
-      setAlarmState(prev => ({
-        ...prev,
-        anomalyDetected: false,
-        anomalyStartTime: null,
-        escalationLevel: 0
-      }))
+      // Clear triggered levels when anomaly resolves - only if we had an anomaly before
+      setAlarmState(prev => {
+        if (prev.anomalyDetected) {
+          console.log('Anomaly resolved, clearing escalation')
+          triggeredLevelsRef.current.clear()
+          return {
+            ...prev,
+            anomalyDetected: false,
+            anomalyStartTime: null,
+            escalationLevel: 0
+          }
+        }
+        return prev
+      })
     }
   }, [alarmState.alarmDisabled, speak])
 
@@ -1126,9 +1196,183 @@ export default function LiquidTankMonitor({ fullPage = false }) {
                 </div>
               )}
             </div>
+
+            {/* Hallucination Detection Panel */}
+            <div style={{
+              background: 'rgba(251,191,36,0.05)',
+              border: '1px solid rgba(251,191,36,0.2)',
+              borderRadius: '12px',
+              padding: '1rem',
+              maxWidth: '400px'
+            }}>
+              <div className="mono" style={{ color: '#fbbf24', fontSize: '0.7rem', marginBottom: '0.75rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                <Brain size={14} />
+                LLM RELIABILITY MONITOR
+              </div>
+              
+              {hallucination ? (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+                  {/* Risk Level Badge */}
+                  <div style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                    padding: '0.5rem',
+                    borderRadius: '6px',
+                    background: hallucination.riskLevel === 'CRITICAL' ? 'rgba(239,68,68,0.15)' :
+                               hallucination.riskLevel === 'WARNING' ? 'rgba(251,191,36,0.15)' :
+                               'rgba(16,185,129,0.15)',
+                    border: `1px solid ${
+                      hallucination.riskLevel === 'CRITICAL' ? '#ef4444' :
+                      hallucination.riskLevel === 'WARNING' ? '#fbbf24' :
+                      '#10b981'
+                    }`
+                  }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                      <Shield size={16} style={{ 
+                        color: hallucination.riskLevel === 'CRITICAL' ? '#ef4444' :
+                               hallucination.riskLevel === 'WARNING' ? '#fbbf24' : '#10b981'
+                      }} />
+                      <span style={{ 
+                        fontSize: '0.75rem', 
+                        fontWeight: 'bold',
+                        color: hallucination.riskLevel === 'CRITICAL' ? '#ef4444' :
+                               hallucination.riskLevel === 'WARNING' ? '#fbbf24' : '#10b981'
+                      }}>
+                        {hallucination.riskLevel}
+                      </span>
+                    </div>
+                    <div style={{ 
+                      fontSize: '1.1rem', 
+                      fontWeight: 'bold',
+                      color: hallucination.riskLevel === 'CRITICAL' ? '#ef4444' :
+                             hallucination.riskLevel === 'WARNING' ? '#fbbf24' : '#10b981'
+                    }}>
+                      {hallucination.risk}%
+                    </div>
+                  </div>
+
+                  {/* Metrics Grid */}
+                  <div style={{ 
+                    display: 'grid', 
+                    gridTemplateColumns: 'repeat(2, 1fr)', 
+                    gap: '0.5rem'
+                  }}>
+                    <MetricBox 
+                      label="Perplexity" 
+                      value={hallucination.perplexity?.toFixed(2) || '0.00'}
+                      threshold="< 25.0"
+                      isWarning={hallucination.perplexity > 25}
+                      icon={<Zap size={12} />}
+                    />
+                    <MetricBox 
+                      label="Entropy" 
+                      value={`${hallucination.entropy?.toFixed(3) || '0.000'} bits`}
+                      threshold="< 1.5"
+                      isWarning={hallucination.entropy > 1.5}
+                      icon={<Activity size={12} />}
+                    />
+                    <MetricBox 
+                      label="Z-Score" 
+                      value={hallucination.zScore?.toFixed(2) || '0.00'}
+                      threshold="< 3.0"
+                      isWarning={Math.abs(hallucination.zScore || 0) >= 3}
+                      icon={<TrendingUp size={12} />}
+                    />
+                    <MetricBox 
+                      label="Smoothness" 
+                      value={`${hallucination.smoothness || 0}%`}
+                      threshold="> 50%"
+                      isWarning={hallucination.smoothness < 50}
+                      icon={<Activity size={12} />}
+                    />
+                  </div>
+
+                  {/* Baseline Status */}
+                  <div style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '0.5rem',
+                    padding: '0.4rem 0.6rem',
+                    borderRadius: '4px',
+                    background: hallucination.baselineCalibrated ? 'rgba(16,185,129,0.1)' : 'rgba(251,191,36,0.1)',
+                    border: `1px solid ${hallucination.baselineCalibrated ? '#10b981' : '#fbbf24'}`,
+                    fontSize: '0.6rem'
+                  }}>
+                    <div style={{
+                      width: 6, height: 6, borderRadius: '50%',
+                      background: hallucination.baselineCalibrated ? '#10b981' : '#fbbf24',
+                      animation: !hallucination.baselineCalibrated ? 'pulse 1s infinite' : 'none'
+                    }} />
+                    <span style={{ color: hallucination.baselineCalibrated ? '#10b981' : '#fbbf24' }}>
+                      {hallucination.baselineCalibrated ? 'Baseline Calibrated' : 'Calibrating Baseline...'}
+                    </span>
+                    <span style={{ marginLeft: 'auto', color: '#888' }}>
+                      {hallucination.totalDecisions || 0} decisions
+                    </span>
+                  </div>
+
+                  {/* Migration Warning */}
+                  {hallucination.shouldFailover && (
+                    <div style={{
+                      padding: '0.5rem',
+                      borderRadius: '6px',
+                      background: 'rgba(239,68,68,0.15)',
+                      border: '1px dashed #ef4444',
+                      fontSize: '0.65rem',
+                      color: '#ef4444',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '0.5rem'
+                    }}>
+                      <AlertTriangle size={14} />
+                      <div>
+                        <div style={{ fontWeight: 'bold' }}>Migration Triggered</div>
+                        <div style={{ color: '#f87171' }}>{hallucination.migrationReason}</div>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Supervisor Status */}
+                  {supervisorStatus && (
+                    <div style={{
+                      marginTop: '0.25rem',
+                      padding: '0.4rem',
+                      background: 'rgba(0,0,0,0.2)',
+                      borderRadius: '4px',
+                      fontSize: '0.55rem',
+                      color: '#888'
+                    }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.25rem' }}>
+                        <span>Tank Instance: #{supervisorStatus.tankInstance}</span>
+                        <span style={{ 
+                          color: supervisorStatus.tankEnvironment === 'blue' ? '#3b82f6' : '#10b981'
+                        }}>
+                          {supervisorStatus.tankEnvironment?.toUpperCase()}
+                        </span>
+                      </div>
+                      <div style={{ display: 'flex', gap: '1rem' }}>
+                        <span>Failovers: {supervisorStatus.failoverCount || 0}</span>
+                        <span>Cross-Swaps: {supervisorStatus.crossSwapCount || 0}</span>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              ) : (
+                <div style={{ 
+                  color: '#666', 
+                  fontSize: '0.7rem', 
+                  textAlign: 'center',
+                  padding: '2rem'
+                }}>
+                  Waiting for hallucination data...
+                </div>
+              )}
+            </div>
           </div>
         </motion.div>
       </div>
+          
 
       <style jsx>{`
         @keyframes pulse {
@@ -1137,6 +1381,38 @@ export default function LiquidTankMonitor({ fullPage = false }) {
         }
       `}</style>
     </section>
+  )
+}
+function MetricBox({ label, value, threshold, isWarning, icon }) {
+  return (
+    <div style={{
+      padding: '0.5rem',
+      borderRadius: '6px',
+      background: isWarning ? 'rgba(239,68,68,0.1)' : 'rgba(255,255,255,0.03)',
+      border: `1px solid ${isWarning ? 'rgba(239,68,68,0.3)' : 'rgba(255,255,255,0.1)'}`,
+    }}>
+      <div style={{ 
+        display: 'flex', 
+        alignItems: 'center', 
+        gap: '0.3rem',
+        marginBottom: '0.25rem'
+      }}>
+        <span style={{ color: isWarning ? '#ef4444' : '#888' }}>{icon}</span>
+        <span style={{ fontSize: '0.55rem', color: '#888', textTransform: 'uppercase' }}>
+          {label}
+        </span>
+      </div>
+      <div style={{ 
+        fontSize: '0.85rem', 
+        fontWeight: 'bold',
+        color: isWarning ? '#ef4444' : '#fff'
+      }}>
+        {value}
+      </div>
+      <div style={{ fontSize: '0.5rem', color: '#666', marginTop: '0.15rem' }}>
+        Threshold: {threshold}
+      </div>
+    </div>
   )
 }
 

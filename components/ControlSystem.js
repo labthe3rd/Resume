@@ -4,6 +4,7 @@ import { motion } from 'framer-motion'
 import { useInView } from 'framer-motion'
 import { useRef, useState, useEffect } from 'react'
 import { RotateCcw, Brain, Zap, AlertTriangle, Send, RefreshCw } from 'lucide-react'
+import { useWebSocket } from '../contexts/WebSocketContext'
 
 export default function ControlSystem({ fullPage = false }) {
   const ref = useRef(null)
@@ -35,109 +36,80 @@ export default function ControlSystem({ fullPage = false }) {
   const [aiDecisions, setAiDecisions] = useState([])
   const [expandedChat, setExpandedChat] = useState(new Set())
 
-  // WebSocket connection
+  // Use shared WebSocket context
+  const { connected: wsConnected, controlData, subscribe } = useWebSocket()
+
+  // Update connected state
   useEffect(() => {
-    let ws = null
-    let reconnectTimer = null
+    setConnected(wsConnected)
+  }, [wsConnected])
 
-    const connect = () => {
-      const isLocal = typeof window !== 'undefined' && window.location.hostname === 'localhost'
-      const wsUrl = process.env.NEXT_PUBLIC_WS_URL || 
-        (isLocal ? 'ws://localhost:3101/ws' : 'wss://api.louisbersine.com/ws')
-      
-      console.log('Connecting to WebSocket:', wsUrl)
-      ws = new WebSocket(wsUrl)
+  // Handle control messages from WebSocket
+  useEffect(() => {
+    if (!controlData) return
 
-      ws.onopen = () => setConnected(true)
+    setSystemState(controlData)
 
-      ws.onmessage = (event) => {
-        try {
-          const data = JSON.parse(event.data)
-          
-          // Only handle system messages
-          if (data.type !== 'system') return
-          
-          setSystemState(data)
-          
-          setHistory(prev => {
-            const newPv = [...prev.pv, data.processValue]
-            const newSp = [...prev.sp, data.setpoint]
-            if (newPv.length > 200) newPv.shift()
-            if (newSp.length > 200) newSp.shift()
-            return { pv: newPv, sp: newSp }
-          })
-          
-          // Track AI decisions
-          if (data.agent) {
-            const now = Date.now()
-            const kp = data.agent.kp ?? 0
-            const ki = data.agent.ki ?? 0
-            const kd = data.agent.kd ?? 0
-            const currentPid = `${kp.toFixed(3)}-${ki.toFixed(4)}-${kd.toFixed(3)}`
-            
-            // Check if PID actually changed
-            const pidChanged = lastPidRef.current !== null && lastPidRef.current !== currentPid
-            
-            // Get action info
-            const action = data.agent.lastAction
-            const actionKey = action ? `${action.action}-${(action.analysis || '').substring(0, 30)}` : null
-            const actionChanged = actionKey && actionKey !== lastActionKeyRef.current
-            
-            // Time-based logging (every 15s even if nothing changed)
-            const timeSinceLast = now - lastLogTimeRef.current
-            
-            // Decide whether to log
-            const shouldLog = pidChanged || actionChanged || timeSinceLast > 15000
-            
-            if (shouldLog && (pidChanged || action)) {
-              lastPidRef.current = currentPid
-              if (actionKey) lastActionKeyRef.current = actionKey
-              lastLogTimeRef.current = now
-              
-              setAiDecisions(prev => {
-                const newDecision = {
-                  id: now,
-                  time: new Date().toLocaleTimeString(),
-                  action: pidChanged ? 'TUNE' : (action?.action?.toUpperCase() || 'UPDATE'),
-                  analysis: pidChanged 
-                    ? `Kp=${kp.toFixed(2)}, Ki=${ki.toFixed(3)}, Kd=${kd.toFixed(2)}`
-                    : (action?.analysis || 'System update'),
-                  pidChanged: pidChanged,
-                  kp, ki, kd,
-                  error: data.error,
-                  stability: data.stability
-                }
-                const updated = [newDecision, ...prev]
-                if (updated.length > 30) updated.pop()
-                return updated
-              })
-            }
-            
-            // Initialize lastPid on first message
-            if (lastPidRef.current === null) {
-              lastPidRef.current = currentPid
-            }
+    setHistory(prev => {
+      const newPv = [...prev.pv, controlData.processValue]
+      const newSp = [...prev.sp, controlData.setpoint]
+      if (newPv.length > 200) newPv.shift()
+      if (newSp.length > 200) newSp.shift()
+      return { pv: newPv, sp: newSp }
+    })
+
+    // Track AI decisions
+    if (controlData.agent) {
+      const now = Date.now()
+      const kp = controlData.agent.kp ?? 0
+      const ki = controlData.agent.ki ?? 0
+      const kd = controlData.agent.kd ?? 0
+      const currentPid = `${kp.toFixed(3)}-${ki.toFixed(4)}-${kd.toFixed(3)}`
+
+      // Check if PID actually changed
+      const pidChanged = lastPidRef.current !== null && lastPidRef.current !== currentPid
+
+      // Get action info
+      const action = controlData.agent.lastAction
+      const actionKey = action ? `${action.action}-${(action.analysis || '').substring(0, 30)}` : null
+      const actionChanged = actionKey && actionKey !== lastActionKeyRef.current
+
+      // Time-based logging (every 15s even if nothing changed)
+      const timeSinceLast = now - lastLogTimeRef.current
+
+      // Decide whether to log
+      const shouldLog = pidChanged || actionChanged || timeSinceLast > 15000
+
+      if (shouldLog && (pidChanged || action)) {
+        lastPidRef.current = currentPid
+        if (actionKey) lastActionKeyRef.current = actionKey
+        lastLogTimeRef.current = now
+
+        setAiDecisions(prev => {
+          const newDecision = {
+            id: now,
+            time: new Date().toLocaleTimeString(),
+            action: pidChanged ? 'TUNE' : (action?.action?.toUpperCase() || 'UPDATE'),
+            analysis: pidChanged
+              ? `Kp=${kp.toFixed(2)}, Ki=${ki.toFixed(3)}, Kd=${kd.toFixed(2)}`
+              : (action?.analysis || 'System update'),
+            pidChanged: pidChanged,
+            kp, ki, kd,
+            error: controlData.error,
+            stability: controlData.stability
           }
-        } catch (e) {
-          console.error('WS parse error:', e)
-        }
+          const updated = [newDecision, ...prev]
+          if (updated.length > 30) updated.pop()
+          return updated
+        })
       }
 
-      ws.onclose = () => {
-        setConnected(false)
-        reconnectTimer = setTimeout(connect, 2000)
+      // Initialize lastPid on first message
+      if (lastPidRef.current === null) {
+        lastPidRef.current = currentPid
       }
-
-      ws.onerror = () => ws.close()
     }
-
-    connect()
-
-    return () => {
-      if (reconnectTimer) clearTimeout(reconnectTimer)
-      if (ws) ws.close()
-    }
-  }, [])
+  }, [controlData])
 
   // Auto-scroll chat only after user sends a message (not on mount or WS updates)
   useEffect(() => {
@@ -192,7 +164,7 @@ export default function ControlSystem({ fullPage = false }) {
 
   const getApiUrl = () => {
     const isLocal = typeof window !== 'undefined' && window.location.hostname === 'localhost'
-    return process.env.NEXT_PUBLIC_API_URL || (isLocal ? 'http://localhost:3000' : '/msg')
+    return process.env.NEXT_PUBLIC_API_URL || (isLocal ? 'http://localhost:3101' : '/msg')
   }
 
   const apiCall = async (endpoint, body = {}) => {
@@ -309,28 +281,9 @@ export default function ControlSystem({ fullPage = false }) {
             <h2 className="section-title">
               AI <span className="gradient-text">Control System</span>
             </h2>
-            <p style={{ color: 'var(--text-secondary)', maxWidth: '600px', marginBottom: '1rem' }}>
+            <p style={{ color: 'var(--text-secondary)', maxWidth: '600px' }}>
               Watch an AI agent tune PID parameters in real-time to stabilize an unstable process.
             </p>
-            
-            {/* Problem & Value Description */}
-            <div style={{
-              background: 'rgba(0,212,255,0.05)',
-              border: '1px solid rgba(0,212,255,0.2)',
-              borderRadius: '10px',
-              padding: '1rem',
-              maxWidth: '800px'
-            }}>
-              <div style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', lineHeight: 1.6 }}>
-                <strong style={{ color: '#a855f7' }}>Problem:</strong> Industrial processes like chemical reactors, HVAC systems, and manufacturing lines require constant PID tuning. Operators spend hours manually adjusting parameters, and poorly tuned systems waste energy, produce defects, or become unstable.
-              </div>
-              <div style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', lineHeight: 1.6, marginTop: '0.5rem' }}>
-                <strong style={{ color: '#10b981' }}>Solution:</strong> An AI agent monitors process behavior and automatically adjusts PID gains (Kp, Ki, Kd) based on error trends, stability metrics, and historical performance. The agent explains its reasoning in natural language.
-              </div>
-              <div style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', lineHeight: 1.6, marginTop: '0.5rem' }}>
-                <strong style={{ color: '#fbbf24' }}>Business Value:</strong> Auto-tuning reduces commissioning time from days to hours. Major automation vendors offer premium advanced control modules for this capability. Even small efficiency improvements in industrial processes translate to significant cost savings in energy and materials.
-              </div>
-            </div>
           </motion.div>
         )}
 

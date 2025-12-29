@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import dynamic from 'next/dynamic'
+import { WebSocketProvider } from '../contexts/WebSocketContext'
 import Navigation from '../components/Navigation'
 import Hero from '../components/Hero'
 import About from '../components/About'
@@ -48,7 +49,7 @@ export default function Home() {
   }, [])
 
   return (
-    <>
+    <WebSocketProvider>
       <AnimatePresence>
         {isLoading && (
           <motion.div
@@ -119,6 +120,6 @@ export default function Home() {
       </main>
 
       <Chatbot />
-    </>
+    </WebSocketProvider>
   )
 }

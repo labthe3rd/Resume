@@ -3,6 +3,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { Menu, X, Download, ChevronDown } from 'lucide-react'
+import React from 'react'
 
 const navItems = [
   { id: 'about', label: 'About' },
@@ -98,9 +99,9 @@ export default function Navigation({ activeSection }) {
             gap: '2rem'
           }} className="desktop-nav">
             {navItems.map((item, index) => (
-              <>
+               <React.Fragment key={item.id}>
                 <motion.button
-                  key={item.id}
+                 
                   onClick={() => scrollToSection(item.id)}
                   whileHover={{ y: -2 }}
                   style={{
@@ -232,7 +233,7 @@ export default function Navigation({ activeSection }) {
                     </AnimatePresence>
                   </div>
                 )}
-              </>
+              </React.Fragment>
             ))}
           </div>
 
@@ -295,7 +296,7 @@ export default function Navigation({ activeSection }) {
             }}
           >
             {navItems.map((item, index) => (
-              <>
+              <React.Fragment key={item.id}>
                 <motion.button
                   key={item.id}
                   initial={{ opacity: 0, y: 20 }}
@@ -357,7 +358,7 @@ export default function Navigation({ activeSection }) {
                     ))}
                   </motion.div>
                 )}
-              </>
+              </React.Fragment>
             ))}
           </motion.div>
         )}

@@ -1,5 +1,6 @@
 'use client'
 
+import { WebSocketProvider } from '../../contexts/WebSocketContext'
 import LiquidTankMonitor from '../../components/LiquidTankMonitor'
 import { motion } from 'framer-motion'
 import { ArrowLeft } from 'lucide-react'
@@ -7,13 +8,14 @@ import Link from 'next/link'
 
 export default function TankMonitorPage() {
   return (
-    <div style={{ 
-      minHeight: '100vh', 
-      background: '#050508',
-      position: 'relative'
-    }}>
-      {/* Back button */}
-      <motion.div
+    <WebSocketProvider>
+      <div style={{
+        minHeight: '100vh',
+        background: '#050508',
+        position: 'relative'
+      }}>
+        {/* Back button */}
+        <motion.div
         initial={{ opacity: 0, x: -20 }}
         animate={{ opacity: 1, x: 0 }}
         style={{
@@ -42,7 +44,8 @@ export default function TankMonitorPage() {
         </Link>
       </motion.div>
 
-      <LiquidTankMonitor fullPage={true} />
-    </div>
+        <LiquidTankMonitor fullPage={true} />
+      </div>
+    </WebSocketProvider>
   )
 }
