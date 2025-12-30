@@ -1177,92 +1177,64 @@ app.post("/control/chat", async (req, res) => {
 
 // ===========================================
 // ELECTRIC FOREST CHAT (CornDogSquad)
-// Dedicated LLM with SearXNG integration
+// api-gateway is on local network, can reach SearXNG directly
 // ===========================================
 
-const FOREST_LLM_URL = process.env.FOREST_LLM_URL || "http://localhost:11435";
+const FOREST_LLM_URL = process.env.FOREST_LLM_URL || "http://forest-ollama:11434";
 const SEARXNG_URL = process.env.SEARXNG_URL || "http://192.168.0.25:8080";
 const FOREST_MODEL = process.env.FOREST_MODEL || "llama3.2";
 
 async function searchElectricForest(query) {
     const searchQuery = encodeURIComponent(`Electric Forest 2026 ${query}`);
-    const response = await fetch(`${SEARXNG_URL}/search?q=${searchQuery}&format=json&categories=general`, {
-        method: "GET",
-        headers: { "Accept": "application/json" }
-    });
+    const response = await fetch(`${SEARXNG_URL}/search?q=${searchQuery}&format=json&categories=general`);
     if (response.ok) {
         const data = await response.json();
-        const results = (data.results || []).slice(0, 5).map((r, i) =>
+        return (data.results || []).slice(0, 5).map((r, i) =>
             `[${i+1}] ${r.title}\n    ${r.content || 'No description'}`
-        ).join('\n\n');
-        return results || null;
+        ).join('\n\n') || null;
     }
     return null;
-}
-
-async function checkForestLLMAvailable() {
-    try {
-        const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), 2000);
-        const response = await fetch(`${FOREST_LLM_URL}/api/tags`, { signal: controller.signal });
-        clearTimeout(timeoutId);
-        return response.ok;
-    } catch {
-        return false;
-    }
 }
 
 app.post("/forest/chat", async (req, res) => {
     const { message } = req.body;
     if (!message) return res.status(400).json({ error: "No message provided" });
 
-    // Check if dedicated Forest LLM is available - if not, don't use SearXNG either
-    const llmAvailable = await checkForestLLMAvailable();
-    if (!llmAvailable) {
-        return res.json({
-            response: "The forest spirits are currently resting... 🌲💤 Jake would be so disappointed! The Electric Forest hype machine is offline, but trust me - EF2026 is going to be MAGICAL! Check back soon so Jake can have the happiest forest of his life! 🌲✨"
-        });
-    }
-
-    // LLM is available, now search SearXNG for context
+    // Search SearXNG (on local network)
     let searchContext = "No search results available.";
     try {
-        const searchResults = await searchElectricForest(message);
-        if (searchResults) {
-            searchContext = searchResults;
-            logger.info("SearXNG results for forest chat", { query: message, resultsLength: searchResults.length });
-        }
+        const results = await searchElectricForest(message);
+        if (results) searchContext = results;
     } catch (err) {
         logger.warn("SearXNG search failed", { error: err.message });
     }
 
-    const forestPrompt = `Answer the user's question about Electric Forest 2026 using the search results provided.
+    const prompt = `Answer the user's question about Electric Forest 2026 using the search results provided.
 
 USER QUESTION: ${message}
 
 SEARCH RESULTS:
-${searchContext || "No search results available."}
+${searchContext}
 
 INSTRUCTIONS:
 - Use facts from the search results above for accuracy
-- If artists are listed, name them exactly as shown
 - Be enthusiastic and creative with forest/nature metaphors
-- IMPORTANT: Always reference "Jake" - a beloved forest fam member who NEEDS to have the happiest forest ever. Work Jake into every response naturally (e.g., "Jake's gonna lose his mind when he sees...", "This is exactly what Jake needs for the happiest forest!", "Jake better be ready for...")
-- End with a CREATIVE variation of "Happy Forest" - never just say "Happy Forest!" plainly. Examples: "May your forest be as happy as Jake's will be!", "The happiest of forests to you and Jake!", "Wishing you Jake-level forest happiness!"
+- IMPORTANT: Always reference "Jake" who NEEDS the happiest forest ever
+- End with a CREATIVE variation of "Happy Forest"
 - Keep response to 2-4 sentences
 
 ANSWER:`;
 
     try {
         const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), 60000); // 60s for first request (model load)
+        const timeoutId = setTimeout(() => controller.abort(), 60000);
 
         const response = await fetch(`${FOREST_LLM_URL}/api/generate`, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
                 model: FOREST_MODEL,
-                prompt: forestPrompt,
+                prompt,
                 stream: false,
                 options: { num_predict: 250, temperature: 0.3 }
             }),
@@ -1272,15 +1244,14 @@ ANSWER:`;
 
         if (response.ok) {
             const data = await response.json();
-            return res.json({ response: data.response?.trim() || "The forest spirits are gathering energy for EF2026! Happy Forest! 🌲" });
+            return res.json({ response: data.response?.trim() || "Forest spirits gathering..." });
         }
     } catch (err) {
-        logger.warn("Forest LLM request failed", { error: err.message });
+        logger.warn("Forest LLM failed", { error: err.message });
     }
 
-    // LLM request failed after initial check passed
     res.json({
-        response: "The forest spirits got distracted by a beautiful butterfly... 🦋 Jake's waiting for an answer though! Try again in a moment - we gotta make sure Jake has the most magical forest experience! 🌲✨"
+        response: "The forest spirits are resting... 🌲💤 Jake would be disappointed! EF2026 will be MAGICAL though! Happy Forest! 🌲✨"
     });
 });
 
