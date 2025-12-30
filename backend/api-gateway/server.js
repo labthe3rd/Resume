@@ -1,22 +1,18 @@
-import {
-    OPCUAServer,
-    Variant,
-    DataType,
-    StatusCodes,
-    nodesets,
-    OPCUACertificateManager,
-    MessageSecurityMode,
-    SecurityPolicy,
-} from "node-opcua";
 import express from "express";
 import cors from "cors";
-import { createLogger, format, transports } from "winston";
-import path from "path";
-import { fileURLToPath } from "url";
+import helmet from "helmet";
 import { WebSocketServer } from "ws";
 import { createServer } from "http";
+import { createLogger, format, transports } from "winston";
+import fs from "fs";
+import path from "path";
+import { fileURLToPath } from "url";
 
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+const SETTINGS_DIR = path.join(__dirname, "..", "settings");
+const SETTINGS_FILE = path.join(SETTINGS_DIR, "ai-config.json");
+const SETTINGS_LOG = path.join(SETTINGS_DIR, "settings-log.json");
 
 const logger = createLogger({
     level: process.env.LOG_LEVEL || "info",
@@ -24,779 +20,1285 @@ const logger = createLogger({
     transports: [new transports.Console()],
 });
 
+const config = {
+    port: parseInt(process.env.PORT) || 3000,
+    ollamaUrl: process.env.OLLAMA_URL || "http://ollama:11434",
+    systemUrl: process.env.SYSTEM_URL || "http://opcua-server:8080",
+    model: process.env.LLM_MODEL || "llama3.2",
+};
+
 // ===========================================
-// UFOPDT CORE IMPLEMENTATION
+// AI SETTINGS MANAGEMENT
 // ===========================================
 
-/**
- * UnstableProcess - Core UFOPDT (Unstable First-Order Plus Dead Time) Implementation
- * 
- * Mathematical Model (Discrete ZOH):
- * y[k] = alpha[k] * y[k-1] + beta[k] * u[k - d[k]]
- * 
- * Where:
- * - alpha[k] = exp(Ts / tau[k])
- * - beta[k]  = K[k] * (alpha[k] - 1)
- * - d[k]     = floor(theta[k] / Ts)
- */
-class UnstableProcess {
-    constructor(Ts, bufferSize = 60.0, maxTau = 1e6) {
-        this.Ts = Ts;
-        this.bufferSize = Math.ceil(bufferSize / Ts);
-        this.maxTau = maxTau;
+const DEFAULT_SETTINGS = {
+    reasoningInterval: 3000,
+    pidChangeCooldownMs: 8000,
+    maxPidStep: { kp: 0.5, ki: 0.03, kd: 0.5 },
+    pidRanges: {
+        kp: { min: 0.1, max: 10 },
+        ki: { min: 0.01, max: 1 },
+        kd: { min: 0.1, max: 5 }
+    },
+    stableDeadband: 1.0,
+    maxOscillationWhenStable: 0.2,
+    hallucinationThresholds: {
+        perplexity: 25.0,
+        shannonEntropy: 1.5,
+        zScoreCritical: 3.0,
+        zScoreWarning: 2.0,
+        semanticEntropy: 1.0
+    },
+    promptTemplate: `You are an AI PID controller tuning agent. Goal: SMOOTH line following setpoint.
+{experienceMemory}
+METRICS: PV={processValue}, SP={setpoint}, Error={error}, Stability={stability}
+Oscillation={oscillation}%, Smoothness={smoothness}%
+PID: Kp={kp}, Ki={ki}, Kd={kd}
+{userInstructions}
 
-        this.K = 1.0;
-        this.tau = 10.0;
-        this.theta = 2.0;
+PID GUIDE: Kp(1-4), Ki(0.05-0.3), Kd(0.3-2)
+{oscillationHint}
+{smoothnessHint}
 
-        this.y = 0.0;
-        this.uBuffer = new Array(this.bufferSize).fill(0.0);
-        this.bufferIndex = 0;
+Respond ONLY with JSON: {"action":"tune"|"monitor","analysis":"reason","kp":num,"ki":num,"kd":num,"confidence":0-100}`
+};
 
-        this.alpha = null;
-        this.beta = null;
-        this.d = 0;
+let currentSettings = { ...DEFAULT_SETTINGS };
 
-        this._computeDiscreteParams();
+function ensureSettingsDir() {
+    if (!fs.existsSync(SETTINGS_DIR)) {
+        fs.mkdirSync(SETTINGS_DIR, { recursive: true });
     }
+}
 
-    _computeDiscreteParams() {
-        const tauClamped = Math.min(Math.abs(this.tau), this.maxTau);
-        
-        if (this.tau > 0) {
-            this.alpha = Math.exp(this.Ts / tauClamped);
-        } else if (this.tau < 0) {
-            this.alpha = Math.exp(-this.Ts / tauClamped);
+function loadSettings() {
+    ensureSettingsDir();
+    try {
+        if (fs.existsSync(SETTINGS_FILE)) {
+            const data = fs.readFileSync(SETTINGS_FILE, 'utf8');
+            currentSettings = { ...DEFAULT_SETTINGS, ...JSON.parse(data) };
+            logger.info("Settings loaded from file", { file: SETTINGS_FILE });
         } else {
-            this.alpha = 1.0 + this.Ts / 1e-6;
+            currentSettings = { ...DEFAULT_SETTINGS };
+            saveSettings(currentSettings);
+            logger.info("Default settings created", { file: SETTINGS_FILE });
         }
-
-        this.beta = this.K * (this.alpha - 1.0);
-        this.d = Math.max(0, Math.floor(this.theta / this.Ts));
+    } catch (err) {
+        logger.error("Failed to load settings", { error: err.message });
+        currentSettings = { ...DEFAULT_SETTINGS };
     }
-
-    setParameters(K, tau, theta) {
-        this.K = K;
-        this.tau = tau;
-        this.theta = theta;
-        this._computeDiscreteParams();
-    }
-
-    step(u) {
-        this.uBuffer[this.bufferIndex] = u;
-
-        const delayedIndex = (this.bufferIndex - this.d + this.bufferSize) % this.bufferSize;
-        const uDelayed = this.uBuffer[delayedIndex];
-
-        this.y = this.alpha * this.y + this.beta * uDelayed;
-
-        this.bufferIndex = (this.bufferIndex + 1) % this.bufferSize;
-
-        return {
-            y: this.y,
-            params: { alpha: this.alpha, beta: this.beta, d: this.d }
-        };
-    }
-
-    reset() {
-        this.y = 0.0;
-        this.uBuffer.fill(0.0);
-        this.bufferIndex = 0;
-    }
+    return currentSettings;
 }
 
-// ===========================================
-// UNSTABLE SYSTEM SIMULATION
-// ===========================================
-
-class UnstableSystem {
-    constructor() {
-        this.processValue = 50.0;
-        this.rawProcessValue = 0.0;
-        this.setpoint = 50.0;
-        this.controlOutput = 50.0;
-
-        this.instabilityRate = 0.1;
-        this.noiseAmplitude = 2.0;
-        this.oscillationFreq = 0.05;
-        this.oscillationAmp = 5.0;
-
-        this.disturbance = 0.0;
-        this.disturbanceDecay = 0.95;
-        this.displayOffset = 50.0;
-        this.momentum = 0.0;
-
-        this.tick = 0;
-        this.lastUpdate = Date.now();
-        this._prevProcessValue = this.processValue;
-
-        this.history = [];
-        this.maxHistory = 100;
-        this.agentActive = true;
-
-        this.ufopdt = new UnstableProcess(0.1, 60.0, 1e6);
-        this.ufopdtParams = { 
-            K: 1.0, 
-            tau: 10.0, 
-            theta: 2.0, 
-            alpha: null, 
-            lastRandomizedAt: null 
-        };
-
-        this.parameterRandomizationInterval = 5 * 60 * 1000; // 5 minutes
-
-        this.randomizeUfopdtParameters("startup");
-    }
-
-    randomizeUfopdtParameters(reason = "interval") {
-        const rand = (min, max) => min + Math.random() * (max - min);
-        const s = Math.max(0.1, Math.min(1.0, this.instabilityRate));
-
-        const Kmag = rand(0.5, 4.0 * (0.75 + s));
-        const K = (Math.random() < 0.5 ? -1 : 1) * Kmag;
-        const tau = rand(1.0, 25.0 * (1.25 - (s * 0.5)));
-        const theta = rand(0.0, 6.0 * (0.75 + s));
-
-        this.ufopdt.setParameters(K, tau, theta);
-
-        this.ufopdtParams.K = K;
-        this.ufopdtParams.tau = tau;
-        this.ufopdtParams.theta = theta;
-        this.ufopdtParams.lastRandomizedAt = Date.now();
-
-        logger.info("UFOPDT parameters randomized", { reason, K, tau, theta });
-    }
-
-    update() {
-        const now = Date.now();
-        const dt = Math.max(1e-3, (now - this.lastUpdate) / 1000.0);
-        this.lastUpdate = now;
-        this.tick++;
-
-        // Check if 5 minutes have passed since last randomization
-        if (this.ufopdtParams.lastRandomizedAt && 
-            (now - this.ufopdtParams.lastRandomizedAt) >= this.parameterRandomizationInterval) {
-            this.randomizeUfopdtParameters("5min-interval");
+function saveSettings(settings) {
+    ensureSettingsDir();
+    try {
+        // Create backup in log file
+        let logEntries = [];
+        if (fs.existsSync(SETTINGS_LOG)) {
+            try {
+                logEntries = JSON.parse(fs.readFileSync(SETTINGS_LOG, 'utf8'));
+            } catch { logEntries = []; }
         }
 
-        const drift = (Math.random() - 0.5) * this.instabilityRate * 10;
-        const noise = (Math.random() - 0.5) * this.noiseAmplitude;
-        const oscillation = Math.sin(this.tick * this.oscillationFreq) * this.oscillationAmp;
-
-        const envDisturbance = drift + noise + oscillation + this.disturbance;
-        const agentU = this.agentActive ? (this.controlOutput - 50) * 0.5 : 0.0;
-        const u = envDisturbance + agentU;
-
-        const result = this.ufopdt.step(u);
-        this.rawProcessValue = result.y;
-
-        const pvDisplay = Math.max(0, Math.min(100, this.displayOffset + this.rawProcessValue));
-        this.processValue = Math.round(pvDisplay * 100) / 100;
-
-        this.momentum = Math.round(((this.processValue - this._prevProcessValue) / dt) * 100) / 100;
-        this._prevProcessValue = this.processValue;
-
-        this.ufopdtParams.alpha = result.params?.alpha ?? this.ufopdtParams.alpha;
-        this.disturbance *= this.disturbanceDecay;
-
-        const error = this.setpoint - this.processValue;
-        this.history.push({
-            timestamp: now,
-            processValue: this.processValue,
-            rawProcessValue: this.rawProcessValue,
-            setpoint: this.setpoint,
-            controlOutput: this.controlOutput,
-            error: Math.abs(error),
-            ufopdt: { 
-                K: this.ufopdtParams.K, 
-                tau: this.ufopdtParams.tau, 
-                theta: this.ufopdtParams.theta, 
-                alpha: this.ufopdtParams.alpha 
-            },
+        logEntries.push({
+            timestamp: new Date().toISOString(),
+            action: 'save',
+            settings: settings
         });
 
-        if (this.history.length > this.maxHistory) this.history.shift();
+        // Keep only last 100 backups
+        if (logEntries.length > 100) {
+            logEntries = logEntries.slice(-100);
+        }
 
-        return this.getState();
-    }
+        fs.writeFileSync(SETTINGS_LOG, JSON.stringify(logEntries, null, 2));
+        fs.writeFileSync(SETTINGS_FILE, JSON.stringify(settings, null, 2));
 
-    getState() {
-        const error = Math.abs(this.setpoint - this.processValue);
-        let stability = "STABLE";
-        if (error > 20) stability = "CRITICAL";
-        else if (error > 10) stability = "UNSTABLE";
-        else if (error > 5) stability = "MARGINAL";
+        currentSettings = settings;
+        applySettingsToAgent();
 
-        return {
-            processValue: this.processValue,
-            rawProcessValue: Math.round(this.rawProcessValue * 100) / 100,
-            setpoint: this.setpoint,
-            controlOutput: Math.round(this.controlOutput * 100) / 100,
-            error: Math.round(error * 100) / 100,
-            stability,
-            instabilityRate: this.instabilityRate,
-            agentActive: this.agentActive,
-            momentum: this.momentum,
-            tick: this.tick,
-            timestamp: Date.now(),
-            ufopdt: {
-                K: Math.round(this.ufopdtParams.K * 1000) / 1000,
-                tau: Math.round(this.ufopdtParams.tau * 1000) / 1000,
-                theta: Math.round(this.ufopdtParams.theta * 1000) / 1000,
-                alpha: this.ufopdtParams.alpha !== null ? (Math.round(this.ufopdtParams.alpha * 100000) / 100000) : null,
-                lastRandomizedAt: this.ufopdtParams.lastRandomizedAt,
-            },
-        };
-    }
-
-    setControlOutput(value) {
-        this.controlOutput = Math.max(0, Math.min(100, value));
-        logger.info("Control output set", { value: this.controlOutput });
-    }
-
-    setSetpoint(value) {
-        this.setpoint = Math.max(0, Math.min(100, value));
-        logger.info("Setpoint changed", { value: this.setpoint });
-    }
-
-    increaseInstability(amount = 0.1) {
-        this.instabilityRate = Math.min(1.0, this.instabilityRate + amount);
-        logger.info("Instability increased", { rate: this.instabilityRate });
-    }
-
-    addDisturbance(amount) {
-        this.disturbance += amount;
-        logger.info("Disturbance added", { amount, total: this.disturbance });
-    }
-
-    reset() {
-        this.processValue = 50.0;
-        this.rawProcessValue = 0.0;
-        this.setpoint = 50.0;
-        this.controlOutput = 50.0;
-        this.instabilityRate = 0.1;
-        this.disturbance = 0.0;
-        this.momentum = 0.0;
-        this.tick = 0;
-        this.lastUpdate = Date.now();
-        this._prevProcessValue = this.processValue;
-        this.history = [];
-
-        this.ufopdt.reset();
-        this.randomizeUfopdtParameters("reset");
-
-        logger.info("System reset");
-    }
-
-    toggleAgent(active) {
-        this.agentActive = active;
-        if (!active) this.controlOutput = 50.0;
-        logger.info("Agent toggled", { active });
+        logger.info("Settings saved", { file: SETTINGS_FILE });
+        return true;
+    } catch (err) {
+        logger.error("Failed to save settings", { error: err.message });
+        return false;
     }
 }
 
-// Global system instance
-const system = new UnstableSystem();
+function applySettingsToAgent() {
+    if (supervisor.controlAgent) {
+        supervisor.controlAgent.reasoningInterval = currentSettings.reasoningInterval;
+        supervisor.controlAgent.pidChangeCooldownMs = currentSettings.pidChangeCooldownMs;
+        supervisor.controlAgent.maxPidStep = currentSettings.maxPidStep;
+        supervisor.controlAgent.stableDeadband = currentSettings.stableDeadband;
+        supervisor.controlAgent.maxOscillationWhenStable = currentSettings.maxOscillationWhenStable;
 
-// ===========================================
-// LIQUID TANK SIMULATION
-// ===========================================
-
-class LiquidTankSystem {
-    constructor() {
-        this.liquidFilling = true;
-        this.liquidLevel = 0.0;
-        this.liquidLow = true;
-        this.liquidHigh = false;
-        
-        this.direction = 'up';
-        this.cycleDuration = 120000;
-        this.lastDirectionChange = Date.now();
-        
-        this.faults = {
-            highSensorDisabled: false,
-            lowSensorDisabled: false,
-            highSensorForcedOn: false,
-            lowSensorForcedOn: false,
-            levelForceNegative: false,
-            levelForceZero: false,
-            levelLocked: false
-        };
-        
-        this.actualLevel = 0.0;
-        this.lockedValue = null;
-        this.anomalyHistory = [];
-        this.maxAnomalyHistory = 100;
-    }
-    
-    update() {
-        const now = Date.now();
-        const elapsed = now - this.lastDirectionChange;
-
-        if (!this.faults.levelLocked) {
-            const progress = Math.min(elapsed / this.cycleDuration, 1.0);
-
-            if (this.direction === 'up') {
-                this.actualLevel = progress * 100;
-            } else {
-                this.actualLevel = 100 - (progress * 100);
-            }
-
-            if (progress >= 1.0) {
-                this.direction = this.direction === 'up' ? 'down' : 'up';
-                this.lastDirectionChange = now;
-            }
+        if (supervisor.controlAgent.hallucinationTracker) {
+            supervisor.controlAgent.hallucinationTracker.thresholds = currentSettings.hallucinationThresholds;
         }
 
-        this.applyFaults();
-        this.updateSensorStates();
-        this.detectAnomalies();
-
-        return this.getState();
-    }
-    
-    applyFaults() {
-        let displayLevel = this.actualLevel;
-        
-        if (this.faults.levelForceNegative) {
-            displayLevel = -Math.abs(this.actualLevel);
-        } else if (this.faults.levelForceZero) {
-            displayLevel = 0.0;
-        } else if (this.faults.levelLocked && this.lockedValue !== null) {
-            displayLevel = this.lockedValue;
-        }
-        
-        this.liquidLevel = displayLevel;
-    }
-    
-    updateSensorStates() {
-        let low = this.liquidLevel < 10;
-        let high = this.liquidLevel > 90;
-        
-        if (this.faults.lowSensorDisabled) {
-            low = false;
-        } else if (this.faults.lowSensorForcedOn) {
-            low = true;
-        }
-        
-        if (this.faults.highSensorDisabled) {
-            high = false;
-        } else if (this.faults.highSensorForcedOn) {
-            high = true;
-        }
-        
-        this.liquidLow = low;
-        this.liquidHigh = high;
-        this.liquidFilling = this.direction === 'up';
-    }
-    
-    detectAnomalies() {
-        const anomalies = [];
-        
-        if (this.liquidLevel < 0) {
-            anomalies.push({ type: 'NEGATIVE_LEVEL', severity: 'CRITICAL' });
-        }
-        
-        if (this.liquidLow && this.liquidHigh) {
-            anomalies.push({ type: 'SENSOR_CONFLICT', severity: 'HIGH' });
-        }
-        
-        if (this.liquidLevel > 100) {
-            anomalies.push({ type: 'OVERFLOW', severity: 'CRITICAL' });
-        }
-        
-        if (anomalies.length > 0) {
-            this.anomalyHistory.push({
-                timestamp: Date.now(),
-                anomalies: anomalies
-            });
-            
-            if (this.anomalyHistory.length > this.maxAnomalyHistory) {
-                this.anomalyHistory.shift();
-            }
-        }
-    }
-    
-    getState() {
-        return {
-            liquidFilling: this.liquidFilling,
-            liquidLevel: Math.round(this.liquidLevel * 100) / 100,
-            liquidLow: this.liquidLow,
-            liquidHigh: this.liquidHigh,
-            direction: this.direction,
-            faults: this.faults,
-            timestamp: Date.now()
-        };
-    }
-    
-    getAnomalyState() {
-        return {
-            recentAnomalies: this.anomalyHistory.slice(-10),
-            totalAnomalies: this.anomalyHistory.length
-        };
-    }
-    
-    setFault(type, value) {
-        if (this.faults.hasOwnProperty(type)) {
-            this.faults[type] = value;
-            
-            if (type === 'levelLocked' && value) {
-                this.lockedValue = this.liquidLevel;
-            }
-            
-            logger.info("Fault set", { type, value });
-        }
-    }
-    
-    reset() {
-        this.liquidFilling = true;
-        this.liquidLevel = 0.0;
-        this.liquidLow = true;
-        this.liquidHigh = false;
-        this.direction = 'up';
-        this.lastDirectionChange = Date.now();
-        this.actualLevel = 0.0;
-        this.lockedValue = null;
-        
-        Object.keys(this.faults).forEach(key => {
-            this.faults[key] = false;
-        });
-        
-        this.anomalyHistory = [];
-        logger.info("Tank system reset");
+        logger.info("Settings applied to control agent");
     }
 }
-
-const tankSystem = new LiquidTankSystem();
-
-// ===========================================
-// CLIENT TRACKING & SIMULATION CONTROL
-// ===========================================
-
-let connectedClients = 0;
-let simulationInterval = null;
-
-function startSimulation() {
-    if (simulationInterval) return;
-    logger.info("Simulation started - clients connected");
-    simulationInterval = setInterval(() => {
-        system.update();
-    }, 100);
-}
-
-function stopSimulation() {
-    if (simulationInterval) {
-        clearInterval(simulationInterval);
-        simulationInterval = null;
-        system.reset();
-        logger.info("Simulation stopped and reset - no clients");
-    }
-}
-
-function clientConnected() {
-    connectedClients++;
-    if (connectedClients === 1) {
-        startSimulation();
-    }
-    logger.info("Client connected", { total: connectedClients });
-}
-
-function clientDisconnected() {
-    connectedClients = Math.max(0, connectedClients - 1);
-    if (connectedClients === 0) {
-        stopSimulation();
-    }
-    logger.info("Client disconnected", { total: connectedClients });
-}
-
-// ===========================================
-// HTTP SERVER SETUP
-// ===========================================
 
 const app = express();
-const httpServer = createServer(app);
+const server = createServer(app);
 
+app.use(helmet({ contentSecurityPolicy: false }));
 app.use(cors());
 app.use(express.json());
 
 // ===========================================
-// UNSTABLE SYSTEM HTTP ROUTES
+// MATHEMATICAL UTILITIES FOR HALLUCINATION DETECTION
+// Based on: "Autonomous Reliability Protocols for LLMs"
 // ===========================================
 
-app.get("/system", (req, res) => {
-    res.json(system.getState());
-});
+const MathUtils = {
+    log: (x) => (x > 0 ? Math.log(x) : -100),
+    exp: (x) => Math.exp(x),
 
-app.post("/system/setpoint", (req, res) => {
-    const { value } = req.body;
-    system.setSetpoint(value);
-    res.json(system.getState());
-});
+    // Shannon Entropy: H(P) = -Σ P(w|x) log P(w|x)
+    shannonEntropy: (probabilities) => {
+        if (!probabilities || probabilities.length === 0) return 0;
+        return probabilities.reduce((acc, p) => {
+            if (p <= 0) return acc;
+            return acc - (p * Math.log(p));
+        }, 0);
+    },
 
-app.post("/system/control", (req, res) => {
-    const { value } = req.body;
-    system.setControlOutput(value);
-    res.json(system.getState());
-});
+    natsToBits: (nats) => nats / Math.log(2),
+    mean: (arr) => arr.length === 0 ? 0 : arr.reduce((a, b) => a + b, 0) / arr.length,
 
-app.post("/system/instability", (req, res) => {
-    const { amount } = req.body;
-    system.increaseInstability(amount);
-    res.json(system.getState());
-});
+    stdDev: (arr) => {
+        if (arr.length < 2) return 0;
+        const avg = MathUtils.mean(arr);
+        const squareDiffs = arr.map(v => Math.pow(v - avg, 2));
+        return Math.sqrt(MathUtils.mean(squareDiffs));
+    },
 
-app.post("/system/disturbance", (req, res) => {
-    const { amount } = req.body;
-    system.addDisturbance(amount);
-    res.json(system.getState());
-});
-
-app.post("/system/reset", (req, res) => {
-    system.reset();
-    res.json(system.getState());
-});
-
-app.post("/system/agent", (req, res) => {
-    const { active } = req.body;
-    system.toggleAgent(active);
-    res.json(system.getState());
-});
-
-// ===========================================
-// TANK SYSTEM HTTP ROUTES
-// ===========================================
-
-app.get("/tank", (req, res) => {
-    res.json(tankSystem.getState());
-});
-
-app.get("/tank/anomalies", (req, res) => {
-    res.json(tankSystem.getAnomalyState());
-});
-
-app.post("/tank/fault", (req, res) => {
-    const { type, value } = req.body;
-    if (type) {
-        tankSystem.setFault(type, value);
+    // Z-score: Z = (X_test - μ_base) / σ_base
+    zScore: (value, baseline, stdDev) => {
+        if (stdDev === 0) return 0;
+        return (value - baseline) / stdDev;
     }
-    res.json(tankSystem.getState());
+};
+
+// ===========================================
+// ENHANCED HALLUCINATION TRACKER
+// Implements: Perplexity, Shannon Entropy, Z-Score Drift Detection
+// ===========================================
+
+class HallucinationTracker {
+    constructor(systemId = 'control') {
+        this.systemId = systemId;
+        this.decisions = [];
+        this.maxDecisions = 100;
+
+        // Thresholds from document
+        this.thresholds = {
+            perplexity: 25.0,
+            shannonEntropy: 1.5,
+            zScoreCritical: 3.0,
+            zScoreWarning: 2.0,
+            semanticEntropy: 1.0
+        };
+
+        this.baseline = {
+            perplexityHistory: [],
+            entropyHistory: [],
+            baselinePerplexity: null,
+            baselinePerplexityStd: null,
+            baselineEntropy: null,
+            baselineEntropyStd: null,
+            calibrated: false
+        };
+
+        this.errorHistory = [];
+        this.simulatedPerplexityWindow = [];
+    }
+
+    // PPL = exp(-1/N * Σ log p) - simulated from confidence/quality
+    simulatePerplexity(decision) {
+        const confidence = decision.confidence || 50;
+        const quality = decision.quality || 0.5;
+        const confidenceFactor = (100 - confidence) / 100;
+        const qualityFactor = (1 - quality);
+        const basePPL = 5;
+        return Math.max(1, basePPL + (confidenceFactor * 20) + (qualityFactor * 25));
+    }
+
+    simulateEntropy(decision) {
+        const confidence = decision.confidence || 50;
+        const mainProb = confidence / 100;
+        const remainingProb = 1 - mainProb;
+        const altProbs = [mainProb, remainingProb * 0.4, remainingProb * 0.3, remainingProb * 0.2, remainingProb * 0.1];
+        return MathUtils.natsToBits(MathUtils.shannonEntropy(altProbs));
+    }
+
+    recordDecision(decision) {
+        const perplexity = this.simulatePerplexity(decision);
+        const entropy = this.simulateEntropy(decision);
+
+        const enrichedDecision = {
+            timestamp: Date.now(),
+            quality: 0.5,
+            confidence: 50,
+            perplexity,
+            entropy,
+            ...decision
+        };
+
+        this.decisions.push(enrichedDecision);
+        if (this.decisions.length > this.maxDecisions) this.decisions.shift();
+
+        this.updateBaseline(perplexity, entropy);
+        this.simulatedPerplexityWindow.push(perplexity);
+        if (this.simulatedPerplexityWindow.length > 20) this.simulatedPerplexityWindow.shift();
+    }
+
+    updateBaseline(perplexity, entropy) {
+        this.baseline.perplexityHistory.push(perplexity);
+        this.baseline.entropyHistory.push(entropy);
+        if (this.baseline.perplexityHistory.length > 50) {
+            this.baseline.perplexityHistory.shift();
+            this.baseline.entropyHistory.shift();
+        }
+        if (this.baseline.perplexityHistory.length >= 10 && !this.baseline.calibrated) {
+            this.calibrateBaseline();
+        }
+    }
+
+    calibrateBaseline() {
+        this.baseline.baselinePerplexity = MathUtils.mean(this.baseline.perplexityHistory);
+        this.baseline.baselinePerplexityStd = MathUtils.stdDev(this.baseline.perplexityHistory);
+        this.baseline.baselineEntropy = MathUtils.mean(this.baseline.entropyHistory);
+        this.baseline.baselineEntropyStd = MathUtils.stdDev(this.baseline.entropyHistory);
+        this.baseline.calibrated = true;
+        logger.info("Hallucination baseline calibrated", {
+            systemId: this.systemId,
+            baselinePPL: this.baseline.baselinePerplexity.toFixed(2),
+            baselineEntropy: this.baseline.baselineEntropy.toFixed(3)
+        });
+    }
+
+    recordError(error) {
+        this.errorHistory.push(error);
+        if (this.errorHistory.length > 50) this.errorHistory.shift();
+    }
+
+    calculateOscillation() {
+        if (this.errorHistory.length < 10) return 0;
+        const recent = this.errorHistory.slice(-20);
+        let directionChanges = 0, prevDelta = 0;
+        for (let i = 1; i < recent.length; i++) {
+            const delta = recent[i] - recent[i-1];
+            if (prevDelta !== 0 && Math.sign(delta) !== Math.sign(prevDelta)) directionChanges++;
+            prevDelta = delta;
+        }
+        return Math.min(1, directionChanges / (recent.length * 0.5));
+    }
+
+    calculateSmoothness() {
+        if (this.errorHistory.length < 10) return 1;
+        const recent = this.errorHistory.slice(-20);
+        const avgError = recent.reduce((s, e) => s + Math.abs(e), 0) / recent.length;
+        const variance = recent.reduce((s, e) => s + Math.pow(e - avgError, 2), 0) / recent.length;
+        return Math.max(0, 1 - (Math.sqrt(variance) / 20) - (avgError / 50));
+    }
+
+    evaluateDecision(errorBefore, errorAfter, confidence) {
+        const errBefore = typeof errorBefore === 'number' && !isNaN(errorBefore) ? errorBefore : 0;
+        const errAfter = typeof errorAfter === 'number' && !isNaN(errorAfter) ? errorAfter : 0;
+        const conf = typeof confidence === 'number' && !isNaN(confidence) ? Math.max(0, Math.min(100, confidence)) : 50;
+
+        const errorImproved = Math.abs(errAfter) < Math.abs(errBefore);
+        const errorWorsened = Math.abs(errAfter) > Math.abs(errBefore) * 1.2;
+        const oscillation = this.calculateOscillation();
+        const smoothness = this.calculateSmoothness();
+
+        let quality = 0.5;
+        if (errorImproved) quality = 0.7 + (conf / 500);
+        if (errorWorsened) quality = 0.3 - ((100 - conf) / 500);
+        quality += smoothness * 0.2;
+        quality -= oscillation * 0.3;
+
+        return { quality: Math.max(0, Math.min(1, quality)), errorImproved, errorWorsened, oscillation, smoothness };
+    }
+
+    getCurrentPerplexity() {
+        return this.simulatedPerplexityWindow.length === 0 ? 0 : MathUtils.mean(this.simulatedPerplexityWindow);
+    }
+
+    getCurrentEntropy() {
+        const recent = this.decisions.slice(-10);
+        return recent.length === 0 ? 0 : MathUtils.mean(recent.map(d => d.entropy || 0));
+    }
+
+    calculateDriftZScore() {
+        if (!this.baseline.calibrated) return 0;
+        return MathUtils.zScore(this.getCurrentPerplexity(), this.baseline.baselinePerplexity, this.baseline.baselinePerplexityStd || 1);
+    }
+
+    calculateRisk() {
+        if (this.decisions.length < 5) return 0;
+        const recentDecisions = this.decisions.slice(-20);
+
+        const currentPPL = this.getCurrentPerplexity();
+        const perplexityRisk = Math.min(1, Math.max(0, (currentPPL - 10) / (this.thresholds.perplexity - 10)));
+        const entropyRisk = Math.min(1, Math.max(0, this.getCurrentEntropy() / this.thresholds.shannonEntropy));
+        const driftRisk = Math.min(1, Math.max(0, Math.abs(this.calculateDriftZScore()) / this.thresholds.zScoreCritical));
+
+        const badDecisions = recentDecisions.filter(d => d.quality < 0.4).length;
+        const badRatio = badDecisions / recentDecisions.length;
+        const avgConfidence = recentDecisions.reduce((s, d) => s + (d.confidence || 50), 0) / recentDecisions.length;
+        const confidenceFactor = (100 - avgConfidence) / 100;
+        const pidChanges = recentDecisions.filter(d => d.pidChanged).length;
+        const erraticFactor = pidChanges > recentDecisions.length * 0.5 ? 0.2 : 0;
+
+        let consecutiveBad = 0;
+        for (let i = recentDecisions.length - 1; i >= 0; i--) {
+            if (recentDecisions[i].quality < 0.4) consecutiveBad++; else break;
+        }
+
+        return Math.min(1,
+            (perplexityRisk * 0.20) + (entropyRisk * 0.15) + (driftRisk * 0.20) +
+            (badRatio * 0.15) + (confidenceFactor * 0.10) + erraticFactor +
+            Math.min(consecutiveBad * 0.08, 0.3) + (this.calculateOscillation() * 0.15)
+        );
+    }
+
+    shouldTriggerMigration() {
+        const zScore = this.calculateDriftZScore();
+        const risk = this.calculateRisk();
+        const currentPPL = this.getCurrentPerplexity();
+
+        const zScoreTrigger = zScore >= this.thresholds.zScoreCritical;
+        const perplexityTrigger = currentPPL > this.thresholds.perplexity;
+        const riskTrigger = risk >= 0.70;
+
+        return {
+            shouldMigrate: zScoreTrigger || (perplexityTrigger && riskTrigger),
+            reason: zScoreTrigger ? 'Z-Score Critical Drift' : perplexityTrigger ? 'High Perplexity' : riskTrigger ? 'High Risk Score' : null,
+            metrics: { zScore, risk, currentPPL, currentEntropy: this.getCurrentEntropy() }
+        };
+    }
+
+    getStatus() {
+        const risk = this.calculateRisk();
+        const zScore = this.calculateDriftZScore();
+        const migrationCheck = this.shouldTriggerMigration();
+
+        let riskLevel = "NORMAL";
+        if (zScore >= this.thresholds.zScoreCritical || risk >= 0.70) riskLevel = "CRITICAL";
+        else if (zScore >= this.thresholds.zScoreWarning || risk >= 0.50) riskLevel = "WARNING";
+
+        return {
+            risk: Math.round(risk * 100),
+            riskLevel,
+            totalDecisions: this.decisions.length,
+            shouldFailover: migrationCheck.shouldMigrate,
+            migrationReason: migrationCheck.reason,
+            oscillation: Math.round(this.calculateOscillation() * 100),
+            smoothness: Math.round(this.calculateSmoothness() * 100),
+            perplexity: Math.round(this.getCurrentPerplexity() * 100) / 100,
+            entropy: Math.round(this.getCurrentEntropy() * 1000) / 1000,
+            zScore: Math.round(zScore * 100) / 100,
+            baselineCalibrated: this.baseline.calibrated,
+            thresholds: this.thresholds
+        };
+    }
+
+    exportState() {
+        return {
+            systemId: this.systemId,
+            decisions: this.decisions.slice(-20),
+            errorHistory: this.errorHistory.slice(-20),
+            baseline: { ...this.baseline },
+            simulatedPerplexityWindow: [...this.simulatedPerplexityWindow]
+        };
+    }
+
+    importState(state) {
+        if (state.decisions) this.decisions = [...state.decisions];
+        if (state.errorHistory) this.errorHistory = [...state.errorHistory];
+        if (state.baseline) this.baseline = { ...state.baseline };
+        if (state.simulatedPerplexityWindow) this.simulatedPerplexityWindow = [...state.simulatedPerplexityWindow];
+    }
+
+    reset() {
+        this.decisions = [];
+        this.errorHistory = [];
+        this.simulatedPerplexityWindow = [];
+        this.baseline = { perplexityHistory: [], entropyHistory: [], baselinePerplexity: null, baselinePerplexityStd: null, baselineEntropy: null, baselineEntropyStd: null, calibrated: false };
+    }
+}
+
+// ===========================================
+// EXPERIENCE MEMORY
+// ===========================================
+
+class ExperienceMemory {
+    constructor(maxSize = 500) {
+        this.experiences = [];
+        this.maxSize = maxSize;
+        this.successfulConfigs = [];
+    }
+
+    record(state, action, pidBefore, pidAfter, errorBefore, errorAfter) {
+        const reward = this.calculateReward(errorBefore, errorAfter);
+        this.experiences.push({ timestamp: Date.now(), state: { error: errorBefore, stability: state.stability }, action, pidBefore, pidAfter, errorBefore, errorAfter, reward });
+        if (this.experiences.length > this.maxSize) this.experiences.shift();
+        if (reward > 0.7 && errorAfter < 2) {
+            this.successfulConfigs.push({ pid: pidAfter, stability: state.stability, error: errorAfter, timestamp: Date.now() });
+            if (this.successfulConfigs.length > 50) this.successfulConfigs.shift();
+        }
+    }
+
+    calculateReward(errorBefore, errorAfter) {
+        const improvement = errorBefore - errorAfter;
+        if (errorAfter < 1) return 1.0;
+        if (errorAfter < 2) return 0.8;
+        if (improvement > 0) return 0.5 + (improvement / 20);
+        return Math.max(0, 0.3 - Math.abs(improvement) / 20);
+    }
+
+    getSummaryForPrompt() {
+        const recent = this.experiences.slice(-20);
+        if (recent.length < 5) return "";
+        const avgReward = recent.reduce((s, e) => s + e.reward, 0) / recent.length;
+        const bestConfig = this.successfulConfigs[this.successfulConfigs.length - 1];
+        let summary = `\nLEARNED FROM EXPERIENCE (${this.experiences.length} samples):\n- Recent avg reward: ${(avgReward * 100).toFixed(0)}%\n`;
+        if (bestConfig) summary += `- Best config: Kp=${bestConfig.pid.kp.toFixed(2)}, Ki=${bestConfig.pid.ki.toFixed(3)}, Kd=${bestConfig.pid.kd.toFixed(2)}\n`;
+        return summary;
+    }
+}
+
+// ===========================================
+// AI CONTROL AGENT
+// ===========================================
+
+class AIControlAgent {
+    constructor(instanceId = 1, systemId = 'control') {
+        this.instanceId = instanceId;
+        this.systemId = systemId;
+        this.active = true;
+        this.actionHistory = [];
+        this.maxHistory = 50;
+        this.memory = new ExperienceMemory();
+
+        this.kp = 0.5; this.ki = 0.02; this.kd = 0.1;
+        this.integral = 0; this.lastError = 0;
+
+        this.reasoningInterval = 3000;
+        this.lastReasoning = 0;
+        this.lastReasoning_result = null;
+        this.pidChangeCooldownMs = 8000;
+        this.lastPidChangeAt = 0;
+        this.maxPidStep = { kp: 0.5, ki: 0.03, kd: 0.5 };
+        this.stableDeadband = 1.0;
+        this.maxOscillationWhenStable = 0.2;
+
+        this.userInstructions = "";
+        this.targetSetpoint = null;
+        this.hallucinationTracker = new HallucinationTracker(systemId);
+        this.lastErrorForEval = null;
+        this.lastConfidence = 50;
+
+        logger.info("AI Agent initialized", { instanceId, systemId });
+    }
+
+    async computeControl(state) {
+        if (!this.active) return null;
+        const error = state.setpoint - state.temperature;
+        this.hallucinationTracker.recordError(error);
+
+        this.integral += error * 0.1;
+        this.integral = Math.max(-50, Math.min(50, this.integral));
+        const derivative = (error - this.lastError) / 0.1;
+        this.lastError = error;
+
+        // Calculate equilibrium heater power based on setpoint and heat loss
+        // Equilibrium: heaterPower = heatLoss * (setpoint - ambientTemp)
+        const heatLoss = state.heatLoss || 0.25;
+        const ambientTemp = 20;
+        const equilibriumPower = heatLoss * (state.setpoint - ambientTemp);
+
+        // Use equilibrium as base with strong proportional and derivative gains
+        let controlOutput = equilibriumPower + (this.kp * error * 3) + (this.ki * this.integral) + (this.kd * derivative * 3);
+        controlOutput = Math.max(0, Math.min(100, controlOutput));
+
+        this.actionHistory.push({ timestamp: Date.now(), error, controlOutput, state: { ...state } });
+        if (this.actionHistory.length > this.maxHistory) this.actionHistory.shift();
+
+        return controlOutput;
+    }
+
+    async reason(state) {
+        const now = Date.now();
+        if (now - this.lastReasoning < this.reasoningInterval) return null;
+        this.lastReasoning = now;
+        logger.info("AI reasoning started", { temp: state.temperature, setpoint: state.setpoint, error: state.error });
+
+        if (this.lastErrorForEval !== null) {
+            const evaluation = this.hallucinationTracker.evaluateDecision(this.lastErrorForEval, state.error, this.lastConfidence);
+            const lastDecision = this.hallucinationTracker.decisions[this.hallucinationTracker.decisions.length - 1];
+            if (lastDecision) { lastDecision.quality = evaluation.quality; lastDecision.errorAfter = state.error; }
+        }
+        this.lastErrorForEval = state.error;
+
+        const recentHistory = this.actionHistory.slice(-10);
+        const avgError = recentHistory.length > 0 ? recentHistory.reduce((sum, a) => sum + Math.abs(a.error), 0) / recentHistory.length : 0;
+        const oscillation = this.hallucinationTracker.calculateOscillation();
+        const smoothness = this.hallucinationTracker.calculateSmoothness();
+        const needsTuning = state.stability !== "STABLE" || Math.abs(avgError) > 2;
+
+        if (this.targetSetpoint !== null) {
+            const target = Math.max(0, Math.min(100, Number(this.targetSetpoint)));
+            if (!isNaN(target)) await this.changeSetpoint(target);
+            this.targetSetpoint = null;
+            this.lastReasoning_result = { action: 'setpoint', analysis: `Setpoint updated to ${target}.`, pidChanged: false, confidence: 90 };
+            return { toolUsed: 'setpoint', confidence: 90 };
+        }
+
+        const absError = Math.abs(Number(state.error));
+        const inDeadband = state.stability === 'STABLE' && absError <= this.stableDeadband && oscillation <= this.maxOscillationWhenStable;
+        const inPidCooldown = (now - this.lastPidChangeAt) < this.pidChangeCooldownMs;
+
+        if (inDeadband || inPidCooldown) {
+            const analysis = inPidCooldown ? 'Holding PID parameters.' : 'Stable within deadband.';
+            this.lastReasoning_result = { action: 'monitor', analysis, pidChanged: false, confidence: 80 };
+            return { toolUsed: 'monitor', confidence: 80 };
+        }
+
+        const prompt = `You are an AI PID controller tuning agent. Goal: SMOOTH line following setpoint.
+${this.memory.getSummaryForPrompt()}
+METRICS: PV=${state.temperature.toFixed(2)}, SP=${state.setpoint}, Error=${state.error.toFixed(2)}, Stability=${state.stability}
+Oscillation=${(oscillation * 100).toFixed(0)}%, Smoothness=${(smoothness * 100).toFixed(0)}%
+PID: Kp=${this.kp.toFixed(2)}, Ki=${this.ki.toFixed(3)}, Kd=${this.kd.toFixed(2)}
+${this.userInstructions ? `USER: "${this.userInstructions}"` : ""}
+
+PID GUIDE: Kp(1-4), Ki(0.05-0.3), Kd(0.3-2)
+${oscillation > 0.3 ? "HIGH OSCILLATION: Increase Kd OR decrease Kp" : ""}
+${smoothness < 0.5 ? "LOW SMOOTHNESS: Balance parameters" : ""}
+
+Respond ONLY with JSON: {"action":"tune"|"monitor","analysis":"reason","kp":num,"ki":num,"kd":num,"confidence":0-100}`;
+
+        try {
+            const controller = new AbortController();
+            const timeoutId = setTimeout(() => controller.abort(), 5000); // 5 second timeout
+            const response = await fetch(`${config.ollamaUrl}/api/generate`, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ model: config.model, prompt, stream: false, format: "json" }),
+                signal: controller.signal
+            });
+            clearTimeout(timeoutId);
+
+            if (!response.ok) throw new Error(`Ollama error: ${response.status}`);
+            const data = await response.json();
+
+            let reasoning;
+            try {
+                let cleanResponse = data.response.trim().replace(/```json?\n?/g, "").replace(/```/g, "").trim();
+                reasoning = JSON.parse(cleanResponse);
+            } catch { throw new Error("Parse failed"); }
+
+            let pidChanged = false, oldPid = { kp: this.kp, ki: this.ki, kd: this.kd };
+            const clamp = (v, min, max) => Math.max(min, Math.min(max, v));
+            const clampStep = (current, proposed, maxStep) => {
+                const delta = proposed - current;
+                if (!isFinite(delta)) return current;
+                return Math.abs(delta) <= maxStep ? proposed : current + Math.sign(delta) * maxStep;
+            };
+
+            if ((reasoning.action === "tune" || reasoning.action === "adjust") && (now - this.lastPidChangeAt) >= this.pidChangeCooldownMs) {
+                if (!isNaN(Number(reasoning.kp))) this.kp = clamp(clampStep(this.kp, Number(reasoning.kp), this.maxPidStep.kp), 0.1, 10);
+                if (!isNaN(Number(reasoning.ki))) this.ki = clamp(clampStep(this.ki, Number(reasoning.ki), this.maxPidStep.ki), 0.01, 1);
+                if (!isNaN(Number(reasoning.kd))) this.kd = clamp(clampStep(this.kd, Number(reasoning.kd), this.maxPidStep.kd), 0.1, 5);
+                pidChanged = (this.kp !== oldPid.kp) || (this.ki !== oldPid.ki) || (this.kd !== oldPid.kd);
+                if (pidChanged) this.lastPidChangeAt = now;
+            }
+
+            const confidence = reasoning.confidence || 50;
+            this.hallucinationTracker.recordDecision({ errorBefore: state.error, confidence, pidChanged, toolUsed: reasoning.action || "monitor" });
+            this.memory.record(state, reasoning.action || "monitor", oldPid, { kp: this.kp, ki: this.ki, kd: this.kd }, this.lastErrorForEval || state.error, state.error);
+            this.lastConfidence = confidence;
+            this.lastReasoning_result = { action: reasoning.action, analysis: reasoning.analysis, pidChanged, confidence };
+
+            return { toolUsed: reasoning.action, confidence, reasoning };
+        } catch (err) {
+            logger.error("AI reasoning failed, using rule-based fallback", { error: err.message });
+
+            // Rule-based fallback when Ollama is unavailable
+            const fallbackResult = this.ruleBasedTune(state, oscillation, smoothness, avgError, now);
+            return fallbackResult;
+        }
+    }
+
+    ruleBasedTune(state, oscillation, smoothness, avgError, now) {
+        const error = state.setpoint - state.temperature;
+        const absError = Math.abs(error);
+        let pidChanged = false;
+        const oldPid = { kp: this.kp, ki: this.ki, kd: this.kd };
+        let analysis = "Monitoring system.";
+
+        // Check if PID is severely detuned (Kp too low or Kd too high)
+        const severelyDetuned = this.kp < 0.3 || this.kd > 3.0;
+
+        // Use shorter cooldown and lower threshold when system is clearly detuned
+        const effectiveCooldown = severelyDetuned ? Math.min(2000, this.pidChangeCooldownMs) : this.pidChangeCooldownMs;
+        const effectiveDeadband = severelyDetuned ? 0.5 : this.stableDeadband;
+
+        // Only tune if outside cooldown and error is significant (or system is detuned)
+        if ((now - this.lastPidChangeAt) >= effectiveCooldown && (absError > effectiveDeadband || severelyDetuned)) {
+
+            // Severely detuned - need to restore reasonable gains
+            if (severelyDetuned && absError > 0.5) {
+                this.kp = Math.max(0.5, this.kp * 2.0);  // Boost proportional
+                this.ki = Math.max(0.02, this.ki * 1.5);  // Boost integral
+                this.kd = Math.min(2.0, this.kd * 0.6);  // Reduce excessive derivative
+                this.integral = 0;  // Reset integral
+                analysis = `System detuned! Restoring gains: Kp=${this.kp.toFixed(2)}, Kd=${this.kd.toFixed(2)}`;
+                pidChanged = true;
+            }
+            // Overshoot detected (temperature above setpoint)
+            else if (error < -2) {
+                // More aggressive correction for overshoot - reduce Kp significantly, increase Kd
+                this.kp = Math.max(0.1, this.kp * 0.85);
+                this.kd = Math.min(5, this.kd * 1.2);
+                // Reset integral to prevent windup from fighting correction
+                this.integral = Math.min(0, this.integral * 0.5);
+                analysis = `Overshoot detected (${(-error).toFixed(1)}°C). Reducing Kp, increasing Kd, resetting integral.`;
+                pidChanged = true;
+            }
+            // High oscillation
+            else if (oscillation > 0.3) {
+                this.kd = Math.min(5, this.kd * 1.15);
+                this.kp = Math.max(0.1, this.kp * 0.9);
+                analysis = `High oscillation (${(oscillation*100).toFixed(0)}%). Increasing Kd, reducing Kp.`;
+                pidChanged = true;
+            }
+            // Heater saturated - system physically cannot reach setpoint
+            else if (state.heaterPower >= 99 && error > 5) {
+                // Calculate max achievable temp with current heat loss
+                const heatLoss = state.heatLoss || 0.25;
+                const maxTemp = 20 + (100 / heatLoss);
+
+                if (state.setpoint > maxTemp + 5) {
+                    // Lower heat loss to make setpoint achievable
+                    const newHeatLoss = Math.max(0.1, heatLoss - 0.15);
+                    fetch(`${config.systemUrl}/user/heatloss`, {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({ value: newHeatLoss })
+                    }).catch(() => {});
+                    analysis = `Heater saturated! Max temp=${maxTemp.toFixed(0)}°C. Reducing heat loss from ${heatLoss.toFixed(2)} to ${newHeatLoss.toFixed(2)}.`;
+                    pidChanged = true;
+                    // Also boost PID for faster recovery
+                    this.kp = Math.min(10, this.kp * 1.3);
+                    this.integral = 0; // Reset integral
+                }
+            }
+            // Undershoot - temperature significantly below setpoint
+            else if (error > 10) {
+                this.kp = Math.min(10, this.kp * 1.1);
+                this.ki = Math.min(1, this.ki * 1.05);
+                analysis = `Large error (${error.toFixed(1)}°C). Increasing Kp and Ki.`;
+                pidChanged = true;
+            }
+            // Slow convergence
+            else if (absError > 2 && smoothness > 0.7) {
+                this.ki = Math.min(1, this.ki * 1.1);
+                analysis = `Slow convergence. Increasing Ki for faster settling.`;
+                pidChanged = true;
+            }
+
+            if (pidChanged) {
+                this.lastPidChangeAt = now;
+                logger.info("Rule-based PID tune", { old: oldPid, new: { kp: this.kp, ki: this.ki, kd: this.kd }, analysis });
+            }
+        }
+
+        this.hallucinationTracker.recordDecision({ errorBefore: state.error, confidence: 60, pidChanged, toolUsed: pidChanged ? "tune" : "monitor" });
+        this.memory.record(state, pidChanged ? "tune" : "monitor", oldPid, { kp: this.kp, ki: this.ki, kd: this.kd }, this.lastErrorForEval || state.error, state.error);
+        this.lastReasoning_result = { action: pidChanged ? "tune" : "monitor", analysis, pidChanged, confidence: 60, fallback: true };
+
+        return { toolUsed: pidChanged ? "tune" : "monitor", confidence: 60, fallback: true };
+    }
+
+    async changeSetpoint(value) {
+        try {
+            await fetch(`${config.systemUrl}/system/setpoint`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ setpoint: value }) });
+        } catch (err) { logger.error("Failed to change setpoint", { error: err.message }); }
+    }
+
+    setUserInstructions(instructions) {
+        this.userInstructions = instructions;
+        const match = instructions.match(/(\d+)/);
+        if (match && (instructions.toLowerCase().includes("setpoint") || instructions.toLowerCase().includes("target"))) {
+            this.targetSetpoint = parseFloat(match[1]);
+        }
+    }
+
+    toggle(active) { this.active = active; if (!active) { this.integral = 0; this.lastError = 0; } }
+
+    getStatus() {
+        return {
+            instanceId: this.instanceId, systemId: this.systemId, active: this.active,
+            kp: this.kp, ki: this.ki, kd: this.kd,
+            hallucination: this.hallucinationTracker.getStatus(),
+            lastAction: this.lastReasoning_result
+        };
+    }
+
+    softReset() { this.integral = 0; this.lastError = 0; this.hallucinationTracker.reset(); }
+
+    // Detune PID to simulate disturbance effect - AI will need to retune
+    detunePID(severity = 'medium') {
+        const oldPid = { kp: this.kp, ki: this.ki, kd: this.kd };
+
+        if (severity === 'high') {
+            // Major detuning - significant error will occur
+            this.kp *= 0.3;  // Reduce proportional gain significantly
+            this.ki *= 0.2;  // Reduce integral
+            this.kd *= 2.5;  // Increase derivative (causes oscillation)
+            this.integral = 0;  // Reset integral accumulator
+        } else {
+            // Moderate detuning
+            this.kp *= 0.5;  // Reduce proportional gain
+            this.ki *= 0.4;  // Reduce integral
+            this.kd *= 1.8;  // Increase derivative
+            this.integral *= 0.3;  // Partially reset integral
+        }
+
+        // Clamp to valid ranges
+        this.kp = Math.max(0.1, Math.min(10, this.kp));
+        this.ki = Math.max(0.01, Math.min(1, this.ki));
+        this.kd = Math.max(0.1, Math.min(5, this.kd));
+
+        // Reset cooldown so AI can immediately start retuning
+        this.lastPidChangeAt = 0;
+
+        logger.info("PID detuned by disturbance", {
+            severity,
+            old: oldPid,
+            new: { kp: this.kp, ki: this.ki, kd: this.kd }
+        });
+
+        return { old: oldPid, new: { kp: this.kp, ki: this.ki, kd: this.kd } };
+    }
+
+    exportState() {
+        return { instanceId: this.instanceId, systemId: this.systemId, kp: this.kp, ki: this.ki, kd: this.kd,
+            userInstructions: this.userInstructions, active: this.active,
+            hallucinationState: this.hallucinationTracker.exportState() };
+    }
+
+    importState(state) {
+        if (state.kp !== undefined) this.kp = state.kp;
+        if (state.ki !== undefined) this.ki = state.ki;
+        if (state.kd !== undefined) this.kd = state.kd;
+        if (state.userInstructions !== undefined) this.userInstructions = state.userInstructions;
+        if (state.active !== undefined) this.active = state.active;
+        if (state.hallucinationState) this.hallucinationTracker.importState(state.hallucinationState);
+    }
+}
+
+// ===========================================
+// CROSS-SYSTEM SUPERVISOR (Blue-Green Migration)
+// ===========================================
+
+class CrossSystemSupervisor {
+    constructor() {
+        this.controlAgent = null;
+        this.tankAgent = null;
+        this.instanceCounter = 0;
+        this.failoverHistory = [];
+        this.crossMigrationHistory = [];
+        this.checkInterval = 5000;
+        this.lastCheck = 0;
+        this.controlEnvironment = 'blue';
+        this.tankEnvironment = 'blue';
+    }
+
+    createControlAgent() {
+        this.instanceCounter++;
+        const agent = new AIControlAgent(this.instanceCounter, 'control');
+        logger.info("New control agent created", { instanceId: this.instanceCounter });
+        return agent;
+    }
+
+    createTankAgent() {
+        this.instanceCounter++;
+        const agent = new AIControlAgent(this.instanceCounter, 'tank');
+        logger.info("New tank agent created", { instanceId: this.instanceCounter });
+        return agent;
+    }
+
+    async checkAndMigrate() {
+        const now = Date.now();
+        if (now - this.lastCheck < this.checkInterval) return null;
+        this.lastCheck = now;
+        const results = { controlMigration: null, tankMigration: null, crossSwap: null };
+
+        if (this.controlAgent) {
+            const migCheck = this.controlAgent.hallucinationTracker.shouldTriggerMigration();
+            if (migCheck.shouldMigrate) {
+                const tankStatus = this.tankAgent?.hallucinationTracker.getStatus();
+                if (tankStatus?.riskLevel === "NORMAL" && this.tankAgent) {
+                    results.crossSwap = await this.crossSystemSwap('control', 'tank', migCheck.reason);
+                } else {
+                    results.controlMigration = await this.failoverAgent('control', migCheck.reason);
+                }
+            }
+        }
+
+        if (this.tankAgent && !results.crossSwap) {
+            const migCheck = this.tankAgent.hallucinationTracker.shouldTriggerMigration();
+            if (migCheck.shouldMigrate) {
+                const controlStatus = this.controlAgent?.hallucinationTracker.getStatus();
+                if (controlStatus?.riskLevel === "NORMAL" && this.controlAgent) {
+                    results.crossSwap = await this.crossSystemSwap('tank', 'control', migCheck.reason);
+                } else {
+                    results.tankMigration = await this.failoverAgent('tank', migCheck.reason);
+                }
+            }
+        }
+        return results;
+    }
+
+    async failoverAgent(systemId, reason) {
+        logger.warn("Failover triggered", { systemId, reason });
+        const oldAgent = systemId === 'control' ? this.controlAgent : this.tankAgent;
+        const oldInstanceId = oldAgent?.instanceId;
+        const newAgent = systemId === 'control' ? this.createControlAgent() : this.createTankAgent();
+
+        if (oldAgent) { newAgent.userInstructions = oldAgent.userInstructions; newAgent.active = oldAgent.active; }
+        if (systemId === 'control') { this.controlAgent = newAgent; this.controlEnvironment = this.controlEnvironment === 'blue' ? 'green' : 'blue'; }
+        else { this.tankAgent = newAgent; this.tankEnvironment = this.tankEnvironment === 'blue' ? 'green' : 'blue'; }
+
+        this.failoverHistory.push({ timestamp: Date.now(), systemId, fromInstance: oldInstanceId, toInstance: newAgent.instanceId, reason, type: 'failover' });
+        return { systemId, oldInstance: oldInstanceId, newInstance: newAgent.instanceId, reason, type: 'failover' };
+    }
+
+    async crossSystemSwap(failingSystem, healthySystem, reason) {
+        logger.warn("Cross-system swap triggered", { failingSystem, healthySystem, reason });
+        const healthyAgent = healthySystem === 'control' ? this.controlAgent : this.tankAgent;
+        if (!healthyAgent) return this.failoverAgent(failingSystem, reason);
+
+        const failingInstanceId = (failingSystem === 'control' ? this.controlAgent : this.tankAgent)?.instanceId;
+        const healthyInstanceId = healthyAgent.instanceId;
+        const healthyState = healthyAgent.exportState();
+
+        const newAgentForFailing = failingSystem === 'control' ? this.createControlAgent() : this.createTankAgent();
+        newAgentForFailing.importState(healthyState);
+
+        const newAgentForHealthy = healthySystem === 'control' ? this.createControlAgent() : this.createTankAgent();
+        newAgentForHealthy.userInstructions = healthyAgent.userInstructions;
+        newAgentForHealthy.active = healthyAgent.active;
+
+        if (failingSystem === 'control') { this.controlAgent = newAgentForFailing; this.tankAgent = newAgentForHealthy; }
+        else { this.tankAgent = newAgentForFailing; this.controlAgent = newAgentForHealthy; }
+        this.controlEnvironment = this.controlEnvironment === 'blue' ? 'green' : 'blue';
+        this.tankEnvironment = this.tankEnvironment === 'blue' ? 'green' : 'blue';
+
+        this.crossMigrationHistory.push({ timestamp: Date.now(), failingSystem, healthySystem, failingInstance: failingInstanceId, healthyInstance: healthyInstanceId, reason, type: 'cross-swap' });
+        return { failingSystem, healthySystem, reason, type: 'cross-swap' };
+    }
+
+    getStatus() {
+        return {
+            controlInstance: this.controlAgent?.instanceId, tankInstance: this.tankAgent?.instanceId,
+            controlEnvironment: this.controlEnvironment, tankEnvironment: this.tankEnvironment,
+            totalInstances: this.instanceCounter, failoverCount: this.failoverHistory.length, crossSwapCount: this.crossMigrationHistory.length,
+            recentFailovers: this.failoverHistory.slice(-5), recentCrossSwaps: this.crossMigrationHistory.slice(-5),
+            controlHallucination: this.controlAgent?.hallucinationTracker.getStatus(),
+            tankHallucination: this.tankAgent?.hallucinationTracker.getStatus()
+        };
+    }
+}
+
+const supervisor = new CrossSystemSupervisor();
+supervisor.controlAgent = supervisor.createControlAgent();
+supervisor.tankAgent = supervisor.createTankAgent();
+
+// Load settings after supervisor is created
+loadSettings();
+
+// ===========================================
+// CONTROL LOOP
+// ===========================================
+
+let controlLoopInterval = null;
+let connectedClients = 0;
+
+async function controlLoop() {
+    try {
+        await supervisor.checkAndMigrate();
+        const currentAgent = supervisor.controlAgent;
+        if (!currentAgent) return;
+
+        const res = await fetch(`${config.systemUrl}/system`);
+        if (!res.ok) return;
+        const state = await res.json();
+
+        const controlOutput = await currentAgent.computeControl(state);
+        if (controlOutput !== null && currentAgent.active) {
+            await fetch(`${config.systemUrl}/system/control`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ controlOutput }) });
+        }
+        await currentAgent.reason(state);
+    } catch (err) { /* System might not be ready */ }
+}
+
+function startControlLoop() {
+    if (controlLoopInterval) return;
+    logger.info("Control loop started");
+    controlLoopInterval = setInterval(controlLoop, 100);
+    fetch(`${config.systemUrl}/simulation/start`, { method: "POST" }).catch(() => {});
+}
+
+function stopControlLoop() {
+    if (controlLoopInterval) {
+        clearInterval(controlLoopInterval);
+        controlLoopInterval = null;
+        logger.info("Control loop paused");
+        fetch(`${config.systemUrl}/simulation/stop`, { method: "POST" }).catch(() => {});
+    }
+}
+
+function clientConnected() { connectedClients++; if (connectedClients === 1) startControlLoop(); logger.info("Client connected", { total: connectedClients }); }
+function clientDisconnected() { connectedClients = Math.max(0, connectedClients - 1); if (connectedClients === 0) stopControlLoop(); logger.info("Client disconnected", { total: connectedClients }); }
+
+// ===========================================
+// API ENDPOINTS
+// ===========================================
+
+app.get("/health", (req, res) => res.json({ status: "healthy", timestamp: new Date().toISOString(), controlLoop: controlLoopInterval ? "running" : "paused", clients: connectedClients, supervisor: supervisor.getStatus() }));
+
+app.get("/diagnostics", async (req, res) => {
+    const results = { timestamp: new Date().toISOString(), services: {} };
+    try {
+        const opcuaRes = await fetch(`${config.systemUrl}/system`);
+        results.services.opcuaServer = { status: opcuaRes.ok ? "healthy" : "error", url: config.systemUrl };
+    } catch (err) { results.services.opcuaServer = { status: "down", error: err.message }; }
+
+    try {
+        const ollamaRes = await fetch(`${config.ollamaUrl}/api/tags`);
+        if (ollamaRes.ok) {
+            const data = await ollamaRes.json();
+            const hasModel = (data.models || []).some(m => m.name.includes(config.model));
+            results.services.ollama = { status: hasModel ? "healthy" : "missing_model", requiredModel: config.model };
+        } else { results.services.ollama = { status: "error" }; }
+    } catch (err) { results.services.ollama = { status: "down", error: err.message }; }
+
+    results.controlAgent = { instanceId: supervisor.controlAgent?.instanceId, environment: supervisor.controlEnvironment, hallucination: supervisor.controlAgent?.hallucinationTracker.getStatus() };
+    results.tankAgent = { instanceId: supervisor.tankAgent?.instanceId, environment: supervisor.tankEnvironment, hallucination: supervisor.tankAgent?.hallucinationTracker.getStatus() };
+    res.json(results);
 });
 
-app.post("/tank/reset", (req, res) => {
-    tankSystem.reset();
-    res.json(tankSystem.getState());
+app.get("/supervisor", (req, res) => res.json(supervisor.getStatus()));
+app.post("/supervisor/failover", (req, res) => { const { systemId = 'control' } = req.body; const result = supervisor.failoverAgent(systemId, "Manual failover"); res.json({ message: "Failover complete", ...result, supervisor: supervisor.getStatus() }); });
+app.post("/supervisor/cross-swap", (req, res) => { const { failingSystem = 'control', healthySystem = 'tank' } = req.body; const result = supervisor.crossSystemSwap(failingSystem, healthySystem, "Manual cross-swap"); res.json({ message: "Cross-swap complete", ...result, supervisor: supervisor.getStatus() }); });
+app.post("/agent/reset-hallucination", (req, res) => { const { systemId = 'control' } = req.body; const agent = systemId === 'control' ? supervisor.controlAgent : supervisor.tankAgent; if (agent) { agent.hallucinationTracker.reset(); res.json({ message: `Reset ${systemId}`, status: agent.hallucinationTracker.getStatus() }); } else res.status(404).json({ error: "Agent not found" }); });
+
+app.get("/system", async (req, res) => { try { const response = await fetch(`${config.systemUrl}/system`); if (response.ok) res.json(await response.json()); else res.status(502).json({ error: "System unavailable" }); } catch (err) { res.status(500).json({ error: err.message }); } });
+app.post("/system/setpoint", async (req, res) => { try { const response = await fetch(`${config.systemUrl}/system/setpoint`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(req.body) }); if (response.ok) res.json(await response.json()); else res.status(502).json({ error: "System unavailable" }); } catch (err) { res.status(500).json({ error: err.message }); } });
+app.post("/user/setpoint", async (req, res) => { try { const response = await fetch(`${config.systemUrl}/user/setpoint`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(req.body) }); if (response.ok) res.json(await response.json()); else res.status(502).json({ error: "System unavailable" }); } catch (err) { res.status(500).json({ error: err.message }); } });
+app.post("/user/heatloss", async (req, res) => { try { const response = await fetch(`${config.systemUrl}/user/heatloss`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(req.body) }); if (response.ok) res.json(await response.json()); else res.status(502).json({ error: "System unavailable" }); } catch (err) { res.status(500).json({ error: err.message }); } });
+app.post("/user/disturbance", async (req, res) => {
+    try {
+        const response = await fetch(`${config.systemUrl}/user/disturbance`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(req.body) });
+        if (response.ok) {
+            // Also detune AI's PID so it needs to retune
+            if (supervisor.controlAgent) {
+                supervisor.controlAgent.detunePID('medium');
+            }
+            res.json(await response.json());
+        } else {
+            res.status(502).json({ error: "System unavailable" });
+        }
+    } catch (err) { res.status(500).json({ error: err.message }); }
+});
+app.post("/user/instability", async (req, res) => {
+    try {
+        const response = await fetch(`${config.systemUrl}/user/instability`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(req.body) });
+        if (response.ok) {
+            // Also detune AI's PID more severely so it needs to retune
+            if (supervisor.controlAgent) {
+                supervisor.controlAgent.detunePID('high');
+            }
+            res.json(await response.json());
+        } else {
+            res.status(502).json({ error: "System unavailable" });
+        }
+    } catch (err) { res.status(500).json({ error: err.message }); }
+});
+app.post("/user/reset", async (req, res) => { try { supervisor.controlAgent?.softReset(); const response = await fetch(`${config.systemUrl}/user/reset`, { method: "POST" }); if (response.ok) res.json(await response.json()); else res.status(502).json({ error: "System unavailable" }); } catch (err) { res.status(500).json({ error: err.message }); } });
+
+app.post("/agent/toggle", (req, res) => { if (supervisor.controlAgent) { supervisor.controlAgent.toggle(req.body.active); res.json({ active: supervisor.controlAgent.active }); } else res.status(500).json({ error: "No agent" }); });
+app.post("/agent/reset-pid", (req, res) => { if (supervisor.controlAgent) { supervisor.controlAgent.kp = 0.5; supervisor.controlAgent.ki = 0.02; supervisor.controlAgent.kd = 0.1; supervisor.controlAgent.integral = 0; res.json({ message: "PID reset" }); } else res.status(500).json({ error: "No agent" }); });
+app.post("/agent/instruct", (req, res) => { if (supervisor.controlAgent && req.body.instruction) { supervisor.controlAgent.setUserInstructions(req.body.instruction); res.json({ message: "Instruction received" }); } else res.status(400).json({ error: "No instruction" }); });
+
+// ===========================================
+// SETTINGS ENDPOINTS
+// ===========================================
+
+app.get("/settings", (req, res) => {
+    res.json({
+        settings: currentSettings,
+        defaults: DEFAULT_SETTINGS,
+        lastLoaded: new Date().toISOString()
+    });
 });
 
-app.post("/simulation/start", (req, res) => {
-    clientConnected();
-    res.json({ simulation: "running", clients: connectedClients });
+app.post("/settings", (req, res) => {
+    const { settings } = req.body;
+    if (!settings) {
+        return res.status(400).json({ error: "No settings provided" });
+    }
+
+    // Merge with current settings to ensure all fields exist
+    const mergedSettings = { ...currentSettings, ...settings };
+
+    if (saveSettings(mergedSettings)) {
+        res.json({
+            success: true,
+            message: "Settings saved and applied",
+            settings: currentSettings
+        });
+    } else {
+        res.status(500).json({ error: "Failed to save settings" });
+    }
 });
 
-app.post("/simulation/stop", (req, res) => {
-    clientDisconnected();
-    res.json({ simulation: simulationInterval ? "running" : "paused", clients: connectedClients });
+app.get("/settings/log", (req, res) => {
+    try {
+        if (fs.existsSync(SETTINGS_LOG)) {
+            const logData = JSON.parse(fs.readFileSync(SETTINGS_LOG, 'utf8'));
+            res.json({ log: logData.slice(-20) }); // Return last 20 entries
+        } else {
+            res.json({ log: [] });
+        }
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+app.post("/settings/reset", (req, res) => {
+    if (saveSettings(DEFAULT_SETTINGS)) {
+        res.json({
+            success: true,
+            message: "Settings reset to defaults",
+            settings: DEFAULT_SETTINGS
+        });
+    } else {
+        res.status(500).json({ error: "Failed to reset settings" });
+    }
+});
+
+app.post("/control/chat", async (req, res) => {
+    const { message } = req.body;
+    if (!message) return res.status(400).json({ error: "No message" });
+
+    // Parse common commands locally first (works without Ollama)
+    const lowerMsg = message.toLowerCase();
+    const numberMatch = message.match(/(\d+)/);
+
+    // Handle setpoint changes
+    if ((lowerMsg.includes("setpoint") || lowerMsg.includes("target") || lowerMsg.includes("set to") || lowerMsg.includes("change to") || lowerMsg.includes("degrees") || lowerMsg.includes("stabilize") || lowerMsg.includes("stable at")) && numberMatch) {
+        const newSetpoint = parseInt(numberMatch[1]);
+        if (newSetpoint >= 0 && newSetpoint <= 400) {
+            await fetch(`${config.systemUrl}/user/setpoint`, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ value: newSetpoint })
+            });
+            return res.json({ response: `Setpoint changed to ${newSetpoint}°C. The system will now work to reach this temperature.` });
+        }
+    }
+
+    // Handle heat loss changes
+    if ((lowerMsg.includes("heat loss") || lowerMsg.includes("heatloss") || lowerMsg.includes("loss")) && numberMatch) {
+        const rawNum = parseFloat(numberMatch[1]);
+        const newHeatLoss = rawNum > 1 ? rawNum / 100 : rawNum;
+        if (newHeatLoss >= 0.01 && newHeatLoss <= 1.0) {
+            await fetch(`${config.systemUrl}/user/heatloss`, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ value: newHeatLoss })
+            });
+            return res.json({ response: `Heat loss coefficient set to ${newHeatLoss.toFixed(2)}.` });
+        }
+    }
+
+    // Handle status queries
+    if (lowerMsg.includes("status") || lowerMsg.includes("temperature") || lowerMsg.includes("how") || lowerMsg.includes("what") || lowerMsg === "") {
+        try {
+            const systemRes = await fetch(`${config.systemUrl}/system`);
+            if (systemRes.ok) {
+                const state = await systemRes.json();
+                return res.json({
+                    response: `Temperature: ${state.temperature.toFixed(1)}°C, Setpoint: ${state.setpoint}°C, Heater: ${state.heaterPower.toFixed(1)}%, Heat Loss: ${state.heatLoss.toFixed(2)}. Status: ${state.stability}.`
+                });
+            }
+        } catch {}
+    }
+
+    // Try Ollama for complex queries, with quick timeout
+    try {
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 2000);
+        const systemRes = await fetch(`${config.systemUrl}/system`);
+        const state = systemRes.ok ? await systemRes.json() : { temperature: 50, setpoint: 50, error: 0 };
+        const prompt = `You are an AI oven controller. Temp=${state.temperature?.toFixed(1)}°C, Setpoint=${state.setpoint}°C. User says: "${message}". Reply in 1-2 sentences.`;
+        const response = await fetch(`${config.ollamaUrl}/api/generate`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ model: config.model, prompt, stream: false, options: { num_predict: 100 } }),
+            signal: controller.signal
+        });
+        clearTimeout(timeoutId);
+        if (response.ok) {
+            const data = await response.json();
+            return res.json({ response: data.response?.trim() || "Working on it." });
+        }
+    } catch {}
+
+    // Fallback help message
+    res.json({ response: "Try: 'set to 250 degrees', 'what's the status', or 'set heat loss to 0.3'" });
 });
 
 // ===========================================
-// WEBSOCKET SERVERS
+// TANK MONITOR AI
 // ===========================================
 
-const wss = new WebSocketServer({ server: httpServer, path: "/ws" });
+class TankAnomalyDetector {
+    constructor() { this.lastAnalysis = null; this.lastAnalysisTime = 0; this.analysisInterval = 5000; this.anomalyStartTime = null; this.escalationLevel = 0; }
 
+    async analyzeState(tankState) {
+        const now = Date.now();
+        const tankTracker = supervisor.tankAgent?.hallucinationTracker;
+        const anomalies = this.detectAnomalies(tankState);
+
+        if (anomalies.length > 0) {
+            if (!this.anomalyStartTime) this.anomalyStartTime = now;
+            const duration = (now - this.anomalyStartTime) / 1000;
+            this.escalationLevel = duration >= 15 ? 3 : duration >= 10 ? 2 : duration >= 5 ? 1 : 0;
+        } else { this.anomalyStartTime = null; this.escalationLevel = 0; }
+
+        if (anomalies.length === 0) {
+            tankTracker?.recordDecision({ confidence: 100, quality: 0.9, toolUsed: 'monitor' });
+            this.lastAnalysis = { status: 'NORMAL', reasoning: 'All sensors normal.', confidence: 100, escalationLevel: 0, anomalies: [] };
+            return this.lastAnalysis;
+        }
+
+        if (now - this.lastAnalysisTime < this.analysisInterval) return this.lastAnalysis;
+        this.lastAnalysisTime = now;
+
+        const prompt = `AI security analyst: Tank Level=${tankState.liquidLevel}%, High=${tankState.liquidHigh}, Low=${tankState.liquidLow}. Anomalies: ${anomalies.map(a => a.type).join(', ')}. Brief analysis (2 sentences).`;
+        try {
+            const response = await fetch(`${config.ollamaUrl}/api/generate`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ model: config.model, prompt, stream: false, options: { num_predict: 150, temperature: 0.3 } }) });
+            if (response.ok) {
+                const data = await response.json();
+                const confidence = this.calculateConfidence(anomalies);
+                tankTracker?.recordDecision({ confidence, quality: 0.6, toolUsed: 'analyze' });
+                this.lastAnalysis = { status: 'ANOMALY', reasoning: data.response?.trim() || 'Analysis unavailable', confidence, escalationLevel: this.escalationLevel, anomalies };
+            } else {
+                this.lastAnalysis = { status: 'ANOMALY', reasoning: `Detected ${anomalies.length} anomaly(ies)`, confidence: this.calculateConfidence(anomalies), escalationLevel: this.escalationLevel, anomalies };
+            }
+        } catch (err) {
+            tankTracker?.recordDecision({ confidence: 0, quality: 0.3, failed: true });
+            this.lastAnalysis = { status: 'ANOMALY', reasoning: 'Analysis error', confidence: 70, escalationLevel: this.escalationLevel, anomalies };
+        }
+        return this.lastAnalysis;
+    }
+
+    detectAnomalies(state) {
+        const anomalies = [];
+        if (state.liquidLevel < 0) anomalies.push({ type: 'NEGATIVE_LEVEL', severity: 'CRITICAL' });
+        if (state.liquidLevel > 100) anomalies.push({ type: 'OVERFLOW', severity: 'CRITICAL' });
+        if (state.liquidLevel >= 90 && !state.liquidHigh) anomalies.push({ type: 'HIGH_SENSOR_MISMATCH', severity: 'HIGH' });
+        if (state.liquidLevel < 90 && state.liquidHigh && state.liquidLevel > 20) anomalies.push({ type: 'FALSE_HIGH_ALARM', severity: 'HIGH' });
+        if (state.liquidLevel <= 20 && !state.liquidLow && state.liquidLevel >= 0) anomalies.push({ type: 'LOW_SENSOR_MISMATCH', severity: 'HIGH' });
+        if (state.liquidLevel > 20 && state.liquidLow && state.liquidLevel < 90) anomalies.push({ type: 'FALSE_LOW_ALARM', severity: 'HIGH' });
+        return anomalies;
+    }
+
+    calculateConfidence(anomalies) {
+        if (anomalies.length === 0) return 100;
+        return Math.max(60, 95 - anomalies.filter(a => a.severity === 'CRITICAL').length * 15 - anomalies.filter(a => a.severity === 'HIGH').length * 10);
+    }
+
+    reset() { this.lastAnalysis = null; this.lastAnalysisTime = 0; this.anomalyStartTime = null; this.escalationLevel = 0; }
+}
+
+const tankAI = new TankAnomalyDetector();
+
+app.get("/tank", async (req, res) => { try { const response = await fetch(`${config.systemUrl}/tank`); if (response.ok) { const state = await response.json(); const analysis = await tankAI.analyzeState(state); res.json({ tank: state, aiAnalysis: analysis, hallucination: supervisor.tankAgent?.hallucinationTracker.getStatus() }); } else res.status(502).json({ error: "Tank unavailable" }); } catch (err) { res.status(500).json({ error: err.message }); } });
+app.post("/tank/fault", async (req, res) => { try { const response = await fetch(`${config.systemUrl}/tank/fault`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(req.body) }); if (response.ok) res.json(await response.json()); else res.status(502).json({ error: "Tank unavailable" }); } catch (err) { res.status(500).json({ error: err.message }); } });
+app.post("/tank/reset", async (req, res) => { try { tankAI.reset(); supervisor.tankAgent?.hallucinationTracker.reset(); const response = await fetch(`${config.systemUrl}/tank/reset`, { method: "POST" }); if (response.ok) res.json(await response.json()); else res.status(502).json({ error: "Tank unavailable" }); } catch (err) { res.status(500).json({ error: err.message }); } });
+
+// ===========================================
+// WEBSOCKET (Single unified connection)
+// ===========================================
+
+const wss = new WebSocketServer({ server, path: "/ws" });
 wss.on("connection", (ws) => {
     clientConnected();
-    
-    const interval = setInterval(() => {
-        if (ws.readyState === ws.OPEN) {
-            ws.send(JSON.stringify(system.getState()));
-        }
+    let lastTankUpdate = 0;
+
+    const interval = setInterval(async () => {
+        try {
+            const now = Date.now();
+
+            // Fetch control system state and send (every 100ms)
+            const systemRes = await fetch(`${config.systemUrl}/system`);
+            if (systemRes.ok && ws.readyState === 1) { // 1 = OPEN
+                const systemState = await systemRes.json();
+                // Get supervisor status but don't override PID values
+                const supervisorStatus = supervisor.controlAgent?.getStatus() || {};
+                const { kp, ki, kd, ...supervisorWithoutPID } = supervisorStatus;
+
+                ws.send(JSON.stringify({
+                    type: 'control',
+                    ...systemState,
+                    // Preserve PID and thinking/tags from OPC-UA, add supervisor metadata only
+                    agent: {
+                        ...systemState.agent,
+                        ...supervisorWithoutPID
+                    },
+                    supervisor: supervisor.getStatus()
+                }));
+            }
+
+            // Fetch tank state and send (every 1000ms)
+            if (now - lastTankUpdate >= 1000) {
+                try {
+                    const tankRes = await fetch(`${config.systemUrl}/tank`);
+                    if (tankRes.ok && ws.readyState === 1) { // 1 = OPEN
+                        const tankState = await tankRes.json();
+                        const analysis = await tankAI.analyzeState(tankState);
+                        ws.send(JSON.stringify({
+                            type: 'tank',
+                            tank: tankState,
+                            aiAnalysis: analysis,
+                            anomalyState: {
+                                hasAnomaly: analysis.anomalies?.length > 0,
+                                anomalies: analysis.anomalies || []
+                            },
+                            hallucination: supervisor.tankAgent?.hallucinationTracker.getStatus(),
+                            supervisor: supervisor.getStatus()
+                        }));
+                    }
+                } catch { }
+                lastTankUpdate = now;
+            }
+        } catch { }
     }, 100);
-    
-    ws.on("close", () => {
-        clearInterval(interval);
-        clientDisconnected();
-    });
-    
-    ws.on("error", () => {
-        clearInterval(interval);
-        clientDisconnected();
-    });
+
+    ws.on("close", () => { clearInterval(interval); clientDisconnected(); });
+    ws.on("error", () => { clearInterval(interval); clientDisconnected(); });
 });
 
-const tankWss = new WebSocketServer({ server: httpServer, path: "/ws/tank" });
-let tankConnectedClients = 0;
-let tankSimulationInterval = null;
-
-function startTankSimulation() {
-    if (tankSimulationInterval) return;
-    logger.info("Tank simulation started - clients connected");
-    tankSimulationInterval = setInterval(() => {
-        tankSystem.update();
-    }, 100);
-}
-
-function stopTankSimulation() {
-    if (tankSimulationInterval) {
-        clearInterval(tankSimulationInterval);
-        tankSimulationInterval = null;
-        tankSystem.reset();
-        logger.info("Tank simulation stopped and reset - no clients");
-    }
-}
-
-tankWss.on("connection", (ws) => {
-    tankConnectedClients++;
-    if (tankConnectedClients === 1) {
-        startTankSimulation();
-    }
-    logger.info("Tank client connected", { total: tankConnectedClients });
-    
-    const interval = setInterval(() => {
-        if (ws.readyState === ws.OPEN) {
-            const state = tankSystem.getState();
-            ws.send(JSON.stringify({
-                tank: state,
-                anomalyState: tankSystem.getAnomalyState()
-            }));
-        }
-    }, 1000);
-    
-    ws.on("close", () => {
-        clearInterval(interval);
-        tankConnectedClients = Math.max(0, tankConnectedClients - 1);
-        if (tankConnectedClients === 0) {
-            stopTankSimulation();
-        }
-        logger.info("Tank client disconnected", { total: tankConnectedClients });
-    });
-    
-    ws.on("error", () => {
-        clearInterval(interval);
-        tankConnectedClients = Math.max(0, tankConnectedClients - 1);
-        if (tankConnectedClients === 0) {
-            stopTankSimulation();
-        }
-    });
-});
-
-const HTTP_PORT = 8080;
-httpServer.listen(HTTP_PORT, () => {
-    logger.info("HTTP/WebSocket server started", { port: HTTP_PORT });
-});
-
-// ===========================================
-// OPC-UA SERVER
-// ===========================================
-
-async function createOPCUAServer() {
-    const port = parseInt(process.env.OPCUA_PORT) || 4840;
-    const pkiFolder = process.env.PKI_FOLDER || path.join(__dirname, "pki");
-
-    const serverCertificateManager = new OPCUACertificateManager({
-        automaticallyAcceptUnknownCertificate: true,
-        rootFolder: pkiFolder,
-    });
-
-    await serverCertificateManager.initialize();
-
-    const server = new OPCUAServer({
-        port,
-        resourcePath: "/UA/UnstableSystem",
-        buildInfo: {
-            productName: "Unstable System Simulator",
-            buildNumber: "1.0.0",
-            buildDate: new Date(),
-        },
-        serverCertificateManager,
-        securityModes: [MessageSecurityMode.None],
-        securityPolicies: [SecurityPolicy.None],
-        allowAnonymous: true,
-        nodeset_filename: [nodesets.standard],
-    });
-
-    await server.initialize();
-
-    const addressSpace = server.engine.addressSpace;
-    const namespace = addressSpace.getOwnNamespace();
-
-    const systemFolder = namespace.addFolder(addressSpace.rootFolder.objects, {
-        browseName: "UnstableSystem",
-    });
-
-    namespace.addVariable({
-        componentOf: systemFolder,
-        browseName: "ProcessValue",
-        nodeId: "ns=1;s=ProcessValue",
-        dataType: DataType.Double,
-        value: { get: () => new Variant({ dataType: DataType.Double, value: system.processValue }) },
-    });
-
-    namespace.addVariable({
-        componentOf: systemFolder,
-        browseName: "Setpoint",
-        nodeId: "ns=1;s=Setpoint",
-        dataType: DataType.Double,
-        value: { get: () => new Variant({ dataType: DataType.Double, value: system.setpoint }) },
-    });
-
-    namespace.addVariable({
-        componentOf: systemFolder,
-        browseName: "ControlOutput",
-        nodeId: "ns=1;s=ControlOutput",
-        dataType: DataType.Double,
-        value: { get: () => new Variant({ dataType: DataType.Double, value: system.controlOutput }) },
-    });
-
-    namespace.addVariable({
-        componentOf: systemFolder,
-        browseName: "Error",
-        nodeId: "ns=1;s=Error",
-        dataType: DataType.Double,
-        value: { get: () => new Variant({ dataType: DataType.Double, value: Math.abs(system.setpoint - system.processValue) }) },
-    });
-
-    const tankFolder = namespace.addFolder(addressSpace.rootFolder.objects, {
-        browseName: "LiquidTank",
-    });
-    
-    namespace.addVariable({
-        componentOf: tankFolder,
-        browseName: "LiquidFilling",
-        nodeId: "ns=1;s=LiquidFilling",
-        dataType: DataType.Boolean,
-        value: { get: () => new Variant({ dataType: DataType.Boolean, value: tankSystem.liquidFilling }) },
-    });
-    
-    namespace.addVariable({
-        componentOf: tankFolder,
-        browseName: "LiquidLevel",
-        nodeId: "ns=1;s=LiquidLevel",
-        dataType: DataType.Double,
-        value: { get: () => new Variant({ dataType: DataType.Double, value: tankSystem.liquidLevel }) },
-    });
-    
-    namespace.addVariable({
-        componentOf: tankFolder,
-        browseName: "LiquidLow",
-        nodeId: "ns=1;s=LiquidLow",
-        dataType: DataType.Boolean,
-        value: { get: () => new Variant({ dataType: DataType.Boolean, value: tankSystem.liquidLow }) },
-    });
-    
-    namespace.addVariable({
-        componentOf: tankFolder,
-        browseName: "LiquidHigh",
-        nodeId: "ns=1;s=LiquidHigh",
-        dataType: DataType.Boolean,
-        value: { get: () => new Variant({ dataType: DataType.Boolean, value: tankSystem.liquidHigh }) },
-    });
-
-    await server.start();
-    logger.info("OPC-UA Server started", { port, endpoint: server.getEndpointUrl() });
-
-    return server;
-}
-
-createOPCUAServer().catch((err) => {
-    logger.error("Failed to start OPC-UA server", { error: err.message });
-});
+server.listen(config.port, () => logger.info("API Gateway started", { port: config.port }));

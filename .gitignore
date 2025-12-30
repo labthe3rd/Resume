@@ -57,3 +57,38 @@ bacckend/*
 *.png
 test-results/
 tests/
+# Test and debug files
+test-*.js
+verify-*.js
+check-*.js
+debug-*.js
+
+# Backup files
+*.backup
+*.bak
+
+# Debug documentation
+TANK-FIXED-SUCCESS.md
+VERIFICATION-COMPLETE.md
+*-SUCCESS.md
+*-COMPLETE.md
+
+# Windows null device files
+nul
+
+# Zip archives
+*.zip
+
+# Debug page (don't deploy)
+app/debug/
+
+# Local PKI certificates
+backend/opcua-server/pki/
+
+# Settings (may contain local config)
+backend/settings/
+
+# Deployment docs (local reference)
+backend/DEPLOYMENT-GUIDE.md
+backend/WEBSOCKET-ARCHITECTURE.md
+backend/deploy-to-vps.sh

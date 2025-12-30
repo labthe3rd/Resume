@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useMemo, useRef,useState, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import dynamic from 'next/dynamic'
 import { WebSocketProvider } from '../contexts/WebSocketContext'
@@ -15,8 +15,11 @@ import Footer from '../components/Footer'
 import ControlSystem from '../components/ControlSystem'
 import LiquidTankMonitor from '../components/LiquidTankMonitor'
 import Chatbot from '../components/Chatbot'
+import SystemArchitectureMap from '../components/SystemArchitectureMap'
 
 const Scene3D = dynamic(() => import('../components/Scene3D'), { ssr: false })
+
+
 
 export default function Home() {
   const [isLoading, setIsLoading] = useState(true)
@@ -113,6 +116,7 @@ export default function Home() {
         <Skills />
         <Experience />
         <Projects />
+        <SystemArchitectureMap />
         <LiquidTankMonitor />
         <ControlSystem />
         <Contact />

@@ -3,7 +3,7 @@
 import { motion } from 'framer-motion'
 import { useInView } from 'framer-motion'
 import { useRef, useState, useEffect } from 'react'
-import { RotateCcw, Brain, Zap, AlertTriangle, Send, RefreshCw } from 'lucide-react'
+import { RotateCcw, Brain, Zap, AlertTriangle, Send, RefreshCw, Thermometer, Flame } from 'lucide-react'
 import { useWebSocket } from '../contexts/WebSocketContext'
 
 export default function ControlSystem({ fullPage = false }) {
@@ -19,15 +19,22 @@ export default function ControlSystem({ fullPage = false }) {
   
   const [connected, setConnected] = useState(false)
   const [systemState, setSystemState] = useState({
-    processValue: 50,
-    setpoint: 50,
-    controlOutput: 50,
+    temperature: 20,
+    setpoint: 200,
+    heaterPower: 0,
     error: 0,
     stability: 'STABLE',
-    instabilityRate: 0.1,
-    agent: { active: true, kp: 0.5, ki: 0.02, kd: 0.1 }
+    heatLoss: 0.25,
+    agent: {
+      active: true,
+      kp: 0.3,
+      ki: 0.01,
+      kd: 0.05,
+      thinking: 'System starting',
+      tags: ['startup']
+    }
   })
-  const [history, setHistory] = useState({ pv: [], sp: [] })
+  const [history, setHistory] = useState({ temp: [], sp: [] })
   const [chatMessages, setChatMessages] = useState([
     { type: 'system', text: 'Tell the AI what setpoint to target, e.g. "stabilize at 75"' }
   ])
@@ -51,11 +58,11 @@ export default function ControlSystem({ fullPage = false }) {
     setSystemState(controlData)
 
     setHistory(prev => {
-      const newPv = [...prev.pv, controlData.processValue]
+      const newTemp = [...prev.temp, controlData.temperature]
       const newSp = [...prev.sp, controlData.setpoint]
-      if (newPv.length > 200) newPv.shift()
-      if (newSp.length > 200) newSp.shift()
-      return { pv: newPv, sp: newSp }
+      if (newTemp.length > 300) newTemp.shift()
+      if (newSp.length > 300) newSp.shift()
+      return { temp: newTemp, sp: newSp }
     })
 
     // Track AI decisions
@@ -124,42 +131,68 @@ export default function ControlSystem({ fullPage = false }) {
     }
   }, [chatMessages, isLoading])
 
-  // Draw chart
+  // Draw chart with HiDPI support
   useEffect(() => {
     const canvas = canvasRef.current
     if (!canvas) return
     const ctx = canvas.getContext('2d')
-    
+
+    // HiDPI scaling
+    const dpr = window.devicePixelRatio || 1
+    const rect = canvas.getBoundingClientRect()
+    canvas.width = rect.width * dpr
+    canvas.height = rect.height * dpr
+    ctx.scale(dpr, dpr)
+
+    const width = rect.width
+    const height = rect.height
+    const leftMargin = 50
+    const plotWidth = width - leftMargin - 10
+
+    // Temperature range: 0-450°C with nice labels
+    const minTemp = 0
+    const maxTemp = 450
+    const tempLabels = [0, 100, 200, 300, 400]
+
+    // Clear background
     ctx.fillStyle = '#0a0a0a'
-    ctx.fillRect(0, 0, canvas.width, canvas.height)
-    
-    ctx.strokeStyle = 'rgba(255,255,255,0.1)'
+    ctx.fillRect(0, 0, width, height)
+
+    // Draw grid and Y-axis labels
+    ctx.strokeStyle = 'rgba(255,255,255,0.12)'
     ctx.lineWidth = 1
-    for (let i = 0; i <= 4; i++) {
-      const y = (canvas.height / 4) * i
+    ctx.fillStyle = 'rgba(255,255,255,0.6)'
+    ctx.font = '11px monospace'
+    ctx.textAlign = 'right'
+
+    tempLabels.forEach(temp => {
+      const y = height - ((temp - minTemp) / (maxTemp - minTemp)) * height
       ctx.beginPath()
-      ctx.moveTo(0, y)
-      ctx.lineTo(canvas.width, y)
+      ctx.moveTo(leftMargin, y)
+      ctx.lineTo(width - 10, y)
       ctx.stroke()
-    }
-    
-    if (history.pv.length < 2) return
-    
+      ctx.fillText(`${temp}°C`, leftMargin - 8, y + 4)
+    })
+
+    if (history.temp.length < 2) return
+
     const drawLine = (data, color) => {
       ctx.strokeStyle = color
       ctx.lineWidth = 2
+      ctx.lineCap = 'round'
+      ctx.lineJoin = 'round'
       ctx.beginPath()
       data.forEach((val, i) => {
-        const x = (i / (data.length - 1)) * canvas.width
-        const y = canvas.height - (val / 100) * canvas.height
+        const x = leftMargin + (i / Math.max(data.length - 1, 1)) * plotWidth
+        const y = height - ((val - minTemp) / (maxTemp - minTemp)) * height
         if (i === 0) ctx.moveTo(x, y)
         else ctx.lineTo(x, y)
       })
       ctx.stroke()
     }
-    
+
     drawLine(history.sp, '#fbbf24')
-    drawLine(history.pv, '#00d4ff')
+    drawLine(history.temp, '#00d4ff')
   }, [history])
 
   const getApiUrl = () => {
@@ -185,7 +218,7 @@ export default function ControlSystem({ fullPage = false }) {
   const increaseInstability = () => apiCall('/user/instability', { amount: 0.15 })
   const resetSystem = () => {
     apiCall('/user/reset')
-    setHistory({ pv: [], sp: [] })
+    setHistory({ temp: [], sp: [] })
     setChatMessages([{ type: 'system', text: 'System reset' }])
     setAiDecisions([])
     lastPidRef.current = null
@@ -348,20 +381,20 @@ export default function ControlSystem({ fullPage = false }) {
             <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
               {/* Chart */}
               <div style={{ background: 'rgba(0,0,0,0.3)', borderRadius: '10px', padding: '0.75rem' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.25rem' }}>
-                  <span className="mono" style={{ color: 'var(--text-tertiary)', fontSize: '0.65rem' }}>PROCESS VARIABLE</span>
+                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.5rem' }}>
+                  <span className="mono" style={{ color: 'var(--text-tertiary)', fontSize: '0.65rem' }}>TEMPERATURE TREND (0-450°C)</span>
                   <div style={{ display: 'flex', gap: '0.75rem', fontSize: '0.65rem' }}>
-                    <span style={{ color: '#00d4ff' }}>● PV</span>
-                    <span style={{ color: '#fbbf24' }}>● SP</span>
+                    <span style={{ color: '#00d4ff' }}>● Temp</span>
+                    <span style={{ color: '#fbbf24' }}>● Setpoint</span>
                   </div>
                 </div>
-                <canvas ref={canvasRef} width={500} height={140} style={{ width: '100%', height: '140px', borderRadius: '6px' }} />
+                <canvas ref={canvasRef} style={{ width: '100%', height: '160px', display: 'block', borderRadius: '6px' }} />
               </div>
 
               {/* Gauges */}
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '0.5rem' }}>
-                <GaugeCard label="Process Value" value={systemState.processValue} color="#00d4ff" />
-                <GaugeCard label="Setpoint" value={systemState.setpoint} color="#fbbf24" />
+                <GaugeCard label="Temperature" value={systemState.temperature} color="#00d4ff" max={450} unit="°C" />
+                <GaugeCard label="Setpoint" value={systemState.setpoint} color="#fbbf24" max={450} unit="°C" />
                 <GaugeCard label="Error" value={systemState.error} color="#ef4444" max={50} />
               </div>
 
@@ -425,10 +458,10 @@ export default function ControlSystem({ fullPage = false }) {
 
                 <div style={{ background: 'rgba(0,0,0,0.3)', borderRadius: '10px', padding: '0.75rem', fontFamily: 'JetBrains Mono, monospace', fontSize: '0.55rem' }}>
                   <div style={{ color: 'var(--text-tertiary)', marginBottom: '0.3rem' }}>// OPC-UA TAGS</div>
-                  <div style={{ color: '#00d4ff' }}>PV: {systemState.processValue?.toFixed(1)}</div>
-                  <div style={{ color: '#fbbf24' }}>SP: {systemState.setpoint?.toFixed(1)}</div>
-                  <div style={{ color: '#10b981' }}>OUT: {systemState.controlOutput?.toFixed(1)}</div>
-                  <div style={{ color: '#ef4444' }}>ERR: {systemState.error?.toFixed(2)}</div>
+                  <div style={{ color: '#00d4ff' }}>PV: {systemState.temperature?.toFixed(2)}</div>
+                  <div style={{ color: '#fbbf24' }}>SP: {systemState.setpoint}</div>
+                  <div style={{ color: '#10b981' }}>OUT: {systemState.heaterPower?.toFixed(2)}</div>
+                  <div style={{ color: '#ef4444' }}>ERR: {systemState.error?.toFixed(3)}</div>
                 </div>
               </div>
             </div>
@@ -592,19 +625,18 @@ export default function ControlSystem({ fullPage = false }) {
   )
 }
 
-function GaugeCard({ label, value, color, max = 100 }) {
+function GaugeCard({ label, value, color, max = 100, unit = '' }) {
   const percentage = Math.min(Math.abs(value) / max * 100, 100)
-  
+
   return (
     <div style={{
-      padding: '0.6rem',
       padding: '0.6rem',
       background: 'rgba(0,0,0,0.3)',
       borderRadius: '8px',
       textAlign: 'center'
     }}>
       <div style={{ fontSize: '1.25rem', fontWeight: 'bold', color }}>
-        {value?.toFixed(1)}
+        {value?.toFixed(1)}{unit}
       </div>
       <div style={{ fontSize: '0.55rem', color: 'var(--text-tertiary)', marginBottom: '0.3rem' }}>
         {label}

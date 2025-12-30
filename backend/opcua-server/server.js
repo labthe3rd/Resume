@@ -15,7 +15,6 @@ import path from "path";
 import { fileURLToPath } from "url";
 import { WebSocketServer } from "ws";
 import { createServer } from "http";
-import { UnstableSystem } from "./utils/UnstableProcess";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -26,162 +25,344 @@ const logger = createLogger({
 });
 
 // ===========================================
-// UNSTABLE SYSTEM SIMULATION
+// OVEN THERMAL SIMULATION
 // ===========================================
 
-class UnstableSystem {
+class OvenThermalSystem {
     constructor() {
-        // Process variable (what we're trying to control)
-        this.processValue = 50.0;
+        // Process variables
+        this.temperature = 20.0;           // Current oven temperature (°C)
+        this.setpoint = 200.0;             // Target temperature (°C)
+        this.heaterPower = 0.0;            // Heater output (0-100%)
         
-        // Setpoint (target value)
-        this.setpoint = 50.0;
+        // Physical parameters
+        this.baseHeatLoss = 0.25;          // Base heat loss (user controlled)
+        this.disturbance = 0.0;            // Temporary disturbance (decays over time)
+        this.heatLoss = 0.25;              // Effective heat loss = base + disturbance
+        this.heaterEfficiency = 100.0;     // How effective the heater is (allows up to 420°C)
+        this.ambientTemp = 20.0;           // Room temperature
+        this.thermalMass = 0.5;            // Thermal inertia (lower = faster response)
         
-        // Control output from agent (0-100)
-        this.controlOutput = 50.0;
+        // PID controller state (initially poorly tuned)
+        this.kp = 0.3;                     // Proportional gain (weak)
+        this.ki = 0.01;                    // Integral gain (weak)
+        this.kd = 0.05;                    // Derivative gain (weak)
+        this.integral = 0.0;               // Integral accumulator
+        this.lastError = 0.0;              // For derivative calculation
         
-        // Instability parameters
-        this.instabilityRate = 0.1;      // Base drift rate
-        this.noiseAmplitude = 2.0;       // Random noise
-        this.oscillationFreq = 0.05;     // Natural oscillation
-        this.oscillationAmp = 5.0;       // Oscillation amplitude
+        // AI tuning state
+        this.aiActive = true;
+        this.aiLastTuneTime = Date.now();
+        this.aiTuneThreshold = 0.25;       // Tune until within 0.25°C of setpoint
+        this.aiThinking = 'System starting - monitoring for instability';
+        this.aiTags = ['startup', 'monitoring'];
+        this.lastTuneError = 0.0;          // Track error from last tune to detect overshoots
+        this.errorHistory = [];            // Track recent errors to detect oscillations
         
-        // Disturbance (user-controlled chaos)
-        this.disturbance = 0.0;
-        this.disturbanceDecay = 0.95;
-        
-        // System dynamics
-        this.momentum = 0.0;
-        this.inertia = 0.8;              // How sluggish the system responds
-        
-        // Time tracking
+        // Simulation timing
+        this.dt = 0.1;                     // Time step (seconds)
         this.tick = 0;
         this.lastUpdate = Date.now();
         
-        // History for trending
+        // History
         this.history = [];
         this.maxHistory = 100;
-        
-        // Agent active flag
-        this.agentActive = true;
+
+        // External control (from API gateway)
+        this.externalControl = true;         // Use external heater power from API gateway
+        this.externalHeaterPower = 0.0;      // Heater power from external controller
+        this.lastExternalUpdate = Date.now();
     }
 
+    setExternalHeaterPower(value) {
+        this.externalHeaterPower = Math.max(0, Math.min(100, value));
+        this.lastExternalUpdate = Date.now();
+    }
+
+    // Thermal dynamics simulation (no randomness, purely deterministic)
     update() {
         const now = Date.now();
         const dt = (now - this.lastUpdate) / 1000.0;
         this.lastUpdate = now;
         this.tick++;
 
-        // Natural instability forces
-        const drift = (Math.random() - 0.5) * this.instabilityRate * 10;
-        const noise = (Math.random() - 0.5) * this.noiseAmplitude;
-        const oscillation = Math.sin(this.tick * this.oscillationFreq) * this.oscillationAmp;
+        // Decay disturbance back to zero (half-life ~3 seconds)
+        if (this.disturbance > 0.001) {
+            this.disturbance *= Math.exp(-dt * 0.3);  // Exponential decay
+            this.heatLoss = this.baseHeatLoss + this.disturbance;
+        } else if (this.disturbance > 0) {
+            this.disturbance = 0;
+            this.heatLoss = this.baseHeatLoss;
+        }
+
+        // Calculate PID control output
+        const error = this.setpoint - this.temperature;
         
-        // Exponential runaway tendency (the system wants to explode)
-        const runaway = (this.processValue - 50) * 0.02;
+        // Proportional term
+        const pTerm = this.kp * error;
         
-        // Total destabilizing force
-        let destabilize = drift + noise + oscillation + runaway + this.disturbance;
+        // Integral term with anti-windup
+        this.integral += error * dt;
+        this.integral = Math.max(-100, Math.min(100, this.integral));
+        const iTerm = this.ki * this.integral;
+
+        // Derivative term
+        const dError = dt > 0 ? (error - this.lastError) / dt : 0;
+        const dTerm = this.kd * dError;
         
-        // Control force from agent (trying to bring back to setpoint)
-        const error = this.setpoint - this.processValue;
-        const controlForce = (this.controlOutput - 50) * 0.5;
+        // PID output
+        let pidOutput = pTerm + iTerm + dTerm;
+        pidOutput = Math.max(0, Math.min(100, pidOutput));
+
+        // Use external control if enabled and receiving commands, otherwise use internal PID
+        if (this.externalControl && (now - this.lastExternalUpdate) < 2000) {
+            this.heaterPower = this.externalHeaterPower;
+        } else {
+            this.heaterPower = pidOutput;
+        }
+        this.lastError = error;
+
+        // Thermal physics
+        // Heat input from heater
+        const heatIn = (this.heaterPower / 100.0) * this.heaterEfficiency;
         
-        // Apply forces with inertia
-        this.momentum = this.momentum * this.inertia + (destabilize + controlForce) * (1 - this.inertia);
-        this.processValue += this.momentum * dt * 10;
+        // Heat loss to environment (proportional to temperature difference)
+        const tempDiff = this.temperature - this.ambientTemp;
+        const heatOut = this.heatLoss * tempDiff;
         
-        // Decay disturbance over time
-        this.disturbance *= this.disturbanceDecay;
+        // Net heat change
+        const netHeat = heatIn - heatOut;
         
-        // Clamp to reasonable bounds
-        this.processValue = Math.max(0, Math.min(100, this.processValue));
+        // Temperature change (dT/dt = netHeat / thermalMass)
+        const dTemp = netHeat * dt / this.thermalMass;
+        this.temperature += dTemp;
         
+        // Clamp temperature to physical bounds
+        this.temperature = Math.max(0, Math.min(500, this.temperature));
+
         // Record history
         this.history.push({
             timestamp: now,
-            processValue: this.processValue,
+            temperature: this.temperature,
             setpoint: this.setpoint,
-            controlOutput: this.controlOutput,
+            heaterPower: this.heaterPower,
             error: Math.abs(error),
         });
         
         if (this.history.length > this.maxHistory) {
             this.history.shift();
         }
-        
+
         return this.getState();
     }
 
     getState() {
-        const error = Math.abs(this.setpoint - this.processValue);
+        // Add realistic sensor noise (±0.15°C for temperature, ±0.3% for power)
+        const tempNoise = (Math.random() - 0.5) * 0.3;
+        const powerNoise = (Math.random() - 0.5) * 0.6;
+
+        const displayTemp = this.temperature + tempNoise;
+        const displayPower = Math.max(0, Math.min(100, this.heaterPower + powerNoise));
+        const error = Math.abs(this.setpoint - displayTemp);
+
         let stability = "STABLE";
         if (error > 20) stability = "CRITICAL";
         else if (error > 10) stability = "UNSTABLE";
-        else if (error > 5) stability = "MARGINAL";
-        
+        else if (error > 2) stability = "MARGINAL";
+
         return {
-            processValue: Math.round(this.processValue * 100) / 100,
+            temperature: Math.round(displayTemp * 100) / 100,
             setpoint: this.setpoint,
-            controlOutput: Math.round(this.controlOutput * 100) / 100,
+            heaterPower: Math.round(displayPower * 100) / 100,
             error: Math.round(error * 100) / 100,
             stability,
-            instabilityRate: this.instabilityRate,
-            agentActive: this.agentActive,
-            momentum: Math.round(this.momentum * 100) / 100,
+            heatLoss: this.heatLoss,
+            aiActive: this.aiActive,
             tick: this.tick,
             timestamp: Date.now(),
+            agent: {
+                active: this.aiActive,
+                kp: this.kp,
+                ki: this.ki,
+                kd: this.kd,
+                thinking: this.aiThinking,
+                tags: this.aiTags,
+                lastAction: {
+                    action: 'monitor',
+                    analysis: this.aiThinking
+                }
+            }
         };
     }
 
-    // Agent sets control output
-    setControlOutput(value) {
-        this.controlOutput = Math.max(0, Math.min(100, value));
-        logger.info("Control output set", { value: this.controlOutput });
-    }
-
-    // User changes setpoint
+    // User controls
     setSetpoint(value) {
-        this.setpoint = Math.max(0, Math.min(100, value));
+        this.setpoint = Math.max(0, Math.min(500, value));
+        this.aiThinking = `Setpoint changed to ${this.setpoint}°C`;
+        this.aiTags = ['setpoint_change', 'monitoring'];
         logger.info("Setpoint changed", { value: this.setpoint });
     }
 
-    // User increases instability
-    increaseInstability(amount = 0.1) {
-        this.instabilityRate = Math.min(1.0, this.instabilityRate + amount);
-        logger.info("Instability increased", { rate: this.instabilityRate });
+    setHeatLoss(value) {
+        // Set base heat loss (permanent change by user)
+        this.baseHeatLoss = Math.max(0.01, Math.min(1.0, value));
+        this.heatLoss = this.baseHeatLoss + this.disturbance;
+        this.aiThinking = `Heat loss coefficient changed to ${this.baseHeatLoss.toFixed(2)} - system destabilized`;
+        this.aiTags = ['heat_loss_change', 'monitoring', 'need_tuning'];
+        logger.info("Heat loss changed", { base: this.baseHeatLoss, effective: this.heatLoss });
     }
 
-    // User adds disturbance (kick the system)
     addDisturbance(amount) {
-        this.disturbance += amount;
-        logger.info("Disturbance added", { amount, total: this.disturbance });
+        // Add temporary disturbance (like door opening) - decays over time
+        this.disturbance = Math.min(0.5, this.disturbance + (amount || 0.15));
+        this.heatLoss = this.baseHeatLoss + this.disturbance;
+        this.aiThinking = `Disturbance detected! Heat loss spiked to ${this.heatLoss.toFixed(2)}`;
+        this.aiTags = ['disturbance', 'recovering'];
+        logger.info("Disturbance added", { amount, disturbance: this.disturbance, effective: this.heatLoss });
     }
 
-    // Reset system
+    // AI PID tuning
+    async tunePID() {
+        if (!this.aiActive) return;
+
+        const error = Math.abs(this.setpoint - this.temperature);
+        const signedError = this.setpoint - this.temperature;
+
+        // Track error history for oscillation detection
+        this.errorHistory.push(signedError);
+        if (this.errorHistory.length > 10) this.errorHistory.shift();
+
+        // Detect overshoot: error increased since last tune
+        const errorIncreasing = error > this.lastTuneError && this.lastTuneError > 0;
+
+        // Detect oscillation: error sign changed
+        const oscillating = this.errorHistory.length >= 3 &&
+            Math.sign(this.errorHistory[this.errorHistory.length - 1]) !==
+            Math.sign(this.errorHistory[0]);
+
+        // System is truly stable only if error < threshold AND not oscillating
+        const isStable = error < this.aiTuneThreshold && !oscillating;
+
+        if (isStable) {
+            this.aiThinking = `Stable: Error ${error.toFixed(2)}°C, No oscillation detected`;
+            this.aiTags = ['stable', 'monitoring'];
+            return;
+        }
+
+        const now = Date.now();
+        const timeSinceLastTune = now - this.aiLastTuneTime;
+
+        // Tune immediately if overshooting, otherwise wait 3 seconds for oscillation, 8 seconds normally
+        const tuneInterval = errorIncreasing ? 0 : oscillating ? 3000 : 8000;
+
+        if (timeSinceLastTune < tuneInterval) {
+            const reason = errorIncreasing ? 'Overshoot detected!' :
+                          oscillating ? 'Oscillation detected' :
+                          'Error above threshold';
+            this.aiThinking = `${reason}: Error ${error.toFixed(1)}°C - tuning in ${((tuneInterval - timeSinceLastTune) / 1000).toFixed(1)}s`;
+            this.aiTags = ['monitoring', errorIncreasing ? 'overshoot' : oscillating ? 'oscillating' : 'converging'];
+            return;
+        }
+
+        this.aiLastTuneTime = now;
+        this.lastTuneError = error;
+
+        // Calculate optimal PID gains based on system characteristics
+        const systemGain = this.heaterEfficiency / this.heatLoss;
+
+        // Conservative PID tuning - start small and increase only for large errors
+        const errorRatio = Math.min(error / 100.0, 2.0); // Scale factor (max 2x at 200°C error)
+        let baseKp = 0.3 * errorRatio; // Conservative proportional gain
+        let baseKi = 0.05 * errorRatio; // Small integral to prevent windup
+        let baseKd = 0.1 * errorRatio; // Moderate derivative
+
+        // If oscillating, reduce gains significantly
+        if (oscillating) {
+            baseKp *= 0.3;
+            baseKi *= 0.2;
+            baseKd *= 0.5;
+        }
+
+        // For very small errors (< 5°C), use very conservative gains
+        if (error < 5.0) {
+            baseKp = Math.min(baseKp, 0.2);
+            baseKi = Math.min(baseKi, 0.02);
+            baseKd = Math.min(baseKd, 0.05);
+        }
+
+        // Calculate new PID gains
+        const newKp = baseKp;
+        const newKi = baseKi;
+        const newKd = baseKd;
+
+        // Store old values to detect changes
+        const oldKp = this.kp;
+
+        // Apply new gains directly (no dampening for faster response)
+        this.kp = newKp;
+        this.ki = newKi;
+        this.kd = newKd;
+
+        // Clamp gains
+        this.kp = Math.max(0.1, Math.min(10, this.kp));
+        this.ki = Math.max(0.001, Math.min(1, this.ki));
+        this.kd = Math.max(0.01, Math.min(5, this.kd));
+
+        // Only reset integral if PID gains changed significantly (more than 20%)
+        const kpChange = Math.abs(this.kp - oldKp) / Math.max(oldKp, 0.01);
+        if (kpChange > 0.2) {
+            this.integral = 0;
+        }
+
+        this.aiThinking = `PID Tuned! Error=${error.toFixed(2)}°C, HeatLoss=${this.heatLoss.toFixed(2)}, Gain=${systemGain.toFixed(2)} → Kp=${this.kp.toFixed(2)}, Ki=${this.ki.toFixed(3)}, Kd=${this.kd.toFixed(2)}`;
+        this.aiTags = ['pid_tuning', 'ziegler_nichols', 'error_correction', 'stabilizing'];
+
+        logger.info("AI tuned PID", {
+            kp: this.kp,
+            ki: this.ki,
+            kd: this.kd,
+            error,
+            heatLoss: this.heatLoss
+        });
+    }
+
     reset() {
-        this.processValue = 50.0;
-        this.setpoint = 50.0;
-        this.controlOutput = 50.0;
-        this.instabilityRate = 0.1;
-        this.disturbance = 0.0;
-        this.momentum = 0.0;
+        this.temperature = this.ambientTemp;
+        this.setpoint = 200.0;
+        this.heaterPower = 0.0;
+        this.heatLoss = 0.25;
+        this.kp = 0.3;
+        this.ki = 0.01;
+        this.kd = 0.05;
+        this.integral = 0.0;
+        this.lastError = 0.0;
         this.history = [];
+        this.aiThinking = 'System reset - poor initial tuning';
+        this.aiTags = ['reset', 'needs_tuning'];
         logger.info("System reset");
     }
 
-    // Toggle agent
+    resetPID() {
+        this.kp = 0.3;
+        this.ki = 0.01;
+        this.kd = 0.05;
+        this.integral = 0.0;
+        this.lastError = 0.0;
+        this.aiThinking = 'PID reset to weak defaults - AI will re-tune';
+        this.aiTags = ['pid_reset', 'need_tuning'];
+        logger.info("PID reset");
+    }
+
     toggleAgent(active) {
-        this.agentActive = active;
-        if (!active) {
-            this.controlOutput = 50.0; // Neutral when agent off
-        }
-        logger.info("Agent toggled", { active });
+        this.aiActive = active;
+        this.aiThinking = active ? 'AI controller activated' : 'AI controller deactivated';
+        this.aiTags = active ? ['activated'] : ['deactivated'];
+        logger.info("AI toggled", { active });
     }
 }
 
-// Global system instance
-const system = new UnstableSystem();
+// Global oven instance
+const ovenSystem = new OvenThermalSystem();
 
 // ===========================================
 // LIQUID TANK SIMULATION
@@ -441,16 +622,23 @@ const tankSystem = new LiquidTankSystem();
 // ===========================================
 let simulationInterval = null;
 let connectedClients = 0;
+let stopTimer = null;
 
 function startSimulation() {
     if (simulationInterval) return; // Already running
 
-    logger.info("Simulation started - clients connected");
-    system.lastUpdate = Date.now(); // Reset timing
+    // Clear any pending stop timer
+    if (stopTimer) {
+        clearTimeout(stopTimer);
+        stopTimer = null;
+    }
 
-    simulationInterval = setInterval(() => {
-        system.update();
-        tankSystem.update(); // Update tank simulation in same loop
+    logger.info("Simulation started - clients connected");
+    ovenSystem.lastUpdate = Date.now(); // Reset timing
+
+    simulationInterval = setInterval(async () => {
+        ovenSystem.update();
+        await ovenSystem.tunePID();
     }, 100);
 }
 
@@ -472,10 +660,17 @@ function clientConnected() {
 
 function clientDisconnected() {
     connectedClients = Math.max(0, connectedClients - 1);
-    if (connectedClients === 0) {
-        stopSimulation();
-    }
     logger.info("Client disconnected", { total: connectedClients });
+
+    if (connectedClients === 0) {
+        // Don't stop immediately - wait 3 seconds for reconnection
+        if (stopTimer) clearTimeout(stopTimer);
+        stopTimer = setTimeout(() => {
+            if (connectedClients === 0) {
+                stopSimulation();
+            }
+        }, 3000);
+    }
 }
 
 // ===========================================
@@ -497,57 +692,103 @@ app.get("/health", (req, res) => {
     });
 });
 
+// Oven system endpoints
 app.get("/system", (req, res) => {
-    res.json(system.getState());
-});
-
-app.get("/system/history", (req, res) => {
-    res.json(system.history);
+    res.json(ovenSystem.getState());
 });
 
 app.post("/system/control", (req, res) => {
     const { controlOutput } = req.body;
-    if (typeof controlOutput === "number") {
-        system.setControlOutput(controlOutput);
+    if (controlOutput !== undefined) {
+        ovenSystem.setExternalHeaterPower(controlOutput);
     }
-    res.json(system.getState());
+    res.json(ovenSystem.getState());
 });
 
-app.post("/system/setpoint", (req, res) => {
-    const { setpoint } = req.body;
-    if (typeof setpoint === "number") {
-        system.setSetpoint(setpoint);
+app.post("/simulation/start", (req, res) => {
+    clientConnected();
+    res.json({ status: "started", clients: connectedClients });
+});
+
+app.post("/simulation/stop", (req, res) => {
+    clientDisconnected();
+    res.json({ status: "stopped", clients: connectedClients });
+});
+
+app.post("/user/setpoint", (req, res) => {
+    const { value } = req.body;
+    if (value !== undefined) {
+        ovenSystem.setSetpoint(value);
     }
-    res.json(system.getState());
+    res.json(ovenSystem.getState());
 });
 
-app.post("/system/disturbance", (req, res) => {
+app.post("/user/heatloss", (req, res) => {
+    const { value } = req.body;
+    if (value !== undefined) {
+        ovenSystem.setHeatLoss(value);
+    }
+    res.json(ovenSystem.getState());
+});
+
+app.post("/user/disturbance", (req, res) => {
+    // Temporary disturbance - like door opening, decays back to normal
     const { amount } = req.body;
-    system.addDisturbance(amount || 10);
-    res.json(system.getState());
+    ovenSystem.addDisturbance(amount || 0.1);
+    res.json(ovenSystem.getState());
 });
 
-app.post("/system/instability", (req, res) => {
+app.post("/user/instability", (req, res) => {
+    // Temporary instability spike - decays back to normal
     const { amount } = req.body;
-    system.increaseInstability(amount || 0.1);
-    res.json(system.getState());
+    ovenSystem.addDisturbance(amount || 0.2);
+    res.json(ovenSystem.getState());
 });
 
-app.post("/system/reset", (req, res) => {
-    system.reset();
-    res.json(system.getState());
+app.post("/user/reset", (req, res) => {
+    ovenSystem.reset();
+    res.json(ovenSystem.getState());
 });
 
-app.post("/system/agent", (req, res) => {
+app.post("/agent/tune", async (req, res) => {
+    await ovenSystem.tunePID();
+    res.json(ovenSystem.getState());
+});
+
+app.post("/agent/reset-pid", (req, res) => {
+    ovenSystem.resetPID();
+    res.json(ovenSystem.getState());
+});
+
+app.post("/agent/toggle", (req, res) => {
     const { active } = req.body;
-    system.toggleAgent(active);
-    res.json(system.getState());
+    ovenSystem.toggleAgent(active);
+    res.json(ovenSystem.getState());
 });
 
-// ===========================================
-// TANK SYSTEM HTTP ROUTES
-// ===========================================
+app.post("/agent/instruct", async (req, res) => {
+    const { instruction } = req.body;
+    
+    // Simple instruction parsing
+    const lower = instruction.toLowerCase();
+    
+    if (lower.includes('reset')) {
+        ovenSystem.reset();
+    } else if (lower.includes('tune') || lower.includes('adjust')) {
+        await ovenSystem.tunePID();
+    } else {
+        // Extract setpoint if mentioned
+        const match = instruction.match(/(\d+)/);
+        if (match) {
+            const value = parseInt(match[1]);
+            ovenSystem.setSetpoint(value);
+        }
+    }
+    
+    res.json(ovenSystem.getState());
+});
 
+// Tank system endpoints
 app.get("/tank", (req, res) => {
     res.json(tankSystem.getState());
 });
@@ -569,7 +810,7 @@ app.post("/tank/reset", (req, res) => {
     res.json(tankSystem.getState());
 });
 
-// Simulation control via HTTP (for api-gateway)
+// Simulation control via HTTP
 app.post("/simulation/start", (req, res) => {
     clientConnected();
     res.json({ simulation: "running", clients: connectedClients });
@@ -580,7 +821,7 @@ app.post("/simulation/stop", (req, res) => {
     res.json({ simulation: simulationInterval ? "running" : "paused", clients: connectedClients });
 });
 
-// WebSocket for real-time updates
+// WebSocket for oven system real-time updates
 const wss = new WebSocketServer({ server: httpServer, path: "/ws" });
 
 wss.on("connection", (ws) => {
@@ -588,7 +829,7 @@ wss.on("connection", (ws) => {
     
     const interval = setInterval(() => {
         if (ws.readyState === ws.OPEN) {
-            ws.send(JSON.stringify(system.getState()));
+            ws.send(JSON.stringify(ovenSystem.getState()));
         }
     }, 100); // 10Hz updates
     
@@ -610,7 +851,7 @@ let tankSimulationInterval = null;
 
 function startTankSimulation() {
     if (tankSimulationInterval) return;
-    logger.info("Tank simulation started - clients connected");
+    logger.info("Tank simulation started");
     tankSimulationInterval = setInterval(() => {
         tankSystem.update();
     }, 100);
@@ -621,7 +862,7 @@ function stopTankSimulation() {
         clearInterval(tankSimulationInterval);
         tankSimulationInterval = null;
         tankSystem.reset();
-        logger.info("Tank simulation stopped and reset - no clients");
+        logger.info("Tank simulation stopped and reset");
     }
 }
 
@@ -663,6 +904,9 @@ tankWss.on("connection", (ws) => {
 const HTTP_PORT = 8080;
 httpServer.listen(HTTP_PORT, () => {
     logger.info("HTTP/WebSocket server started", { port: HTTP_PORT });
+
+    // Start tank simulation automatically so HTTP polling works
+    startTankSimulation();
 });
 
 // ===========================================
@@ -682,9 +926,9 @@ async function createOPCUAServer() {
 
     const server = new OPCUAServer({
         port,
-        resourcePath: "/UA/UnstableSystem",
+        resourcePath: "/UA/IndustrialSystems",
         buildInfo: {
-            productName: "Unstable System Simulator",
+            productName: "Industrial Systems Simulator",
             buildNumber: "1.0.0",
             buildDate: new Date(),
         },
@@ -700,50 +944,73 @@ async function createOPCUAServer() {
     const addressSpace = server.engine.addressSpace;
     const namespace = addressSpace.getOwnNamespace();
 
-    const systemFolder = namespace.addFolder(addressSpace.rootFolder.objects, {
-        browseName: "UnstableSystem",
+    // Oven System folder
+    const ovenFolder = namespace.addFolder(addressSpace.rootFolder.objects, {
+        browseName: "OvenSystem",
     });
 
-    // Process Value
+    // Temperature (Process Value)
     namespace.addVariable({
-        componentOf: systemFolder,
-        browseName: "ProcessValue",
-        nodeId: "ns=1;s=ProcessValue",
+        componentOf: ovenFolder,
+        browseName: "Temperature",
+        nodeId: "ns=1;s=Temperature",
         dataType: DataType.Double,
-        value: { get: () => new Variant({ dataType: DataType.Double, value: system.processValue }) },
+        value: { get: () => new Variant({ dataType: DataType.Double, value: ovenSystem.temperature }) },
     });
 
     // Setpoint
     namespace.addVariable({
-        componentOf: systemFolder,
+        componentOf: ovenFolder,
         browseName: "Setpoint",
         nodeId: "ns=1;s=Setpoint",
         dataType: DataType.Double,
-        value: { get: () => new Variant({ dataType: DataType.Double, value: system.setpoint }) },
+        value: { get: () => new Variant({ dataType: DataType.Double, value: ovenSystem.setpoint }) },
     });
 
-    // Control Output
+    // Heater Power
     namespace.addVariable({
-        componentOf: systemFolder,
-        browseName: "ControlOutput",
-        nodeId: "ns=1;s=ControlOutput",
+        componentOf: ovenFolder,
+        browseName: "HeaterPower",
+        nodeId: "ns=1;s=HeaterPower",
         dataType: DataType.Double,
-        value: { get: () => new Variant({ dataType: DataType.Double, value: system.controlOutput }) },
+        value: { get: () => new Variant({ dataType: DataType.Double, value: ovenSystem.heaterPower }) },
     });
 
     // Error
     namespace.addVariable({
-        componentOf: systemFolder,
+        componentOf: ovenFolder,
         browseName: "Error",
         nodeId: "ns=1;s=Error",
         dataType: DataType.Double,
-        value: { get: () => new Variant({ dataType: DataType.Double, value: Math.abs(system.setpoint - system.processValue) }) },
+        value: { get: () => new Variant({ dataType: DataType.Double, value: Math.abs(ovenSystem.setpoint - ovenSystem.temperature) }) },
     });
 
-    // ===========================================
-    // LIQUID TANK OPC-UA VARIABLES
-    // ===========================================
-    
+    // PID Gains
+    namespace.addVariable({
+        componentOf: ovenFolder,
+        browseName: "Kp",
+        nodeId: "ns=1;s=Kp",
+        dataType: DataType.Double,
+        value: { get: () => new Variant({ dataType: DataType.Double, value: ovenSystem.kp }) },
+    });
+
+    namespace.addVariable({
+        componentOf: ovenFolder,
+        browseName: "Ki",
+        nodeId: "ns=1;s=Ki",
+        dataType: DataType.Double,
+        value: { get: () => new Variant({ dataType: DataType.Double, value: ovenSystem.ki }) },
+    });
+
+    namespace.addVariable({
+        componentOf: ovenFolder,
+        browseName: "Kd",
+        nodeId: "ns=1;s=Kd",
+        dataType: DataType.Double,
+        value: { get: () => new Variant({ dataType: DataType.Double, value: ovenSystem.kd }) },
+    });
+
+    // Tank System folder
     const tankFolder = namespace.addFolder(addressSpace.rootFolder.objects, {
         browseName: "LiquidTank",
     });
@@ -790,7 +1057,7 @@ async function createOPCUAServer() {
     return server;
 }
 
-// Start everything
+// Start OPC-UA server
 createOPCUAServer().catch((err) => {
     logger.error("Failed to start OPC-UA server", { error: err.message });
 });
