@@ -92,3 +92,4 @@ backend/settings/
 backend/DEPLOYMENT-GUIDE.md
 backend/WEBSOCKET-ARCHITECTURE.md
 backend/deploy-to-vps.sh
+backend/forest-llm/
