@@ -1,10 +1,13 @@
+// file: ./app/control/page.js  (or whatever your control route is)
 'use client'
 
 import { useEffect, useLayoutEffect } from 'react'
-import { WebSocketProvider } from '../../contexts/WebSocketContext'
 import ControlSystem from '../../components/ControlSystem'
+import { useWebSocket } from '../../contexts/WebSocketContext'
 
 export default function ControlPage() {
+  const { subscribe } = useWebSocket()
+
   // Force scroll to top immediately and after hydration
   useLayoutEffect(() => {
     window.scrollTo(0, 0)
@@ -13,21 +16,19 @@ export default function ControlPage() {
   }, [])
 
   useEffect(() => {
-    // Also after a small delay to catch any async rendering
-    const timer = setTimeout(() => {
-      window.scrollTo(0, 0)
-    }, 100)
+    const timer = setTimeout(() => window.scrollTo(0, 0), 100)
     return () => clearTimeout(timer)
   }, [])
 
+  // Subscribe ONLY to control stream on this page
+  useEffect(() => {
+    const unsub = subscribe('control', () => {})
+    return () => unsub()
+  }, [subscribe])
+
   return (
-    <WebSocketProvider>
-      <div style={{
-        minHeight: '100vh',
-        background: 'var(--bg-primary, #050508)'
-      }}>
-        <ControlSystem fullPage={true} />
-      </div>
-    </WebSocketProvider>
+    <div style={{ minHeight: '100vh', background: 'var(--bg-primary, #050508)' }}>
+      <ControlSystem fullPage={true} />
+    </div>
   )
 }

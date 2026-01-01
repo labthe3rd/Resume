@@ -1,8 +1,10 @@
+//page.js
 'use client'
 
-import { useState, useRef, useEffect } from 'react'
+import { useState, useRef, useEffect, useMemo } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { Send, Trees, Sparkles, Music, Lock } from 'lucide-react'
+import { io } from 'socket.io-client'
 
 const PASSWORD = 'CornDooogSquad'
 
@@ -15,7 +17,16 @@ export default function CornDogSquad() {
   ])
   const [input, setInput] = useState('')
   const [isLoading, setIsLoading] = useState(false)
+  const [isStreaming, setIsStreaming] = useState(false) // NEW
+
   const chatEndRef = useRef(null)
+  const socketRef = useRef(null)
+  const activeRequestRef = useRef(null)
+  const getSocketBaseUrl = () => {
+      const isLocal = typeof window !== 'undefined' && window.location.hostname === 'localhost'
+      // IMPORTANT: base URL only (no /ws), path is configured separately
+      return process.env.NEXT_PUBLIC_API_URL || (isLocal ? 'http://localhost:3101' : window.location.origin)
+    }
 
   useEffect(() => {
     chatEndRef.current?.scrollIntoView({ behavior: 'smooth' })
@@ -37,33 +48,127 @@ export default function CornDogSquad() {
     return process.env.NEXT_PUBLIC_API_URL || (isLocal ? 'http://localhost:3101' : '/msg')
   }
 
-  const sendMessage = async () => {
-    if (!input.trim() || isLoading) return
+useEffect(() => {
+  if (!authenticated) return
 
-    const userMessage = input.trim()
-    setInput('')
-    setMessages(prev => [...prev, { type: 'user', text: userMessage }])
-    setIsLoading(true)
+  const baseUrl = getSocketBaseUrl()
+  const socket = io(baseUrl, {
+    path: '/ws',
+    transports: ['websocket'],
+    reconnection: true,
+    reconnectionDelay: 500,
+    timeout: 5000,
+  })
 
-    try {
-      const res = await fetch(`${getApiUrl()}/forest-api/chat`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ message: userMessage })
-      })
-      const data = await res.json()
+  socketRef.current = socket
 
-      if (data.response) {
-        setMessages(prev => [...prev, { type: 'forest', text: data.response }])
-      } else {
-        setMessages(prev => [...prev, { type: 'forest', text: 'The forest spirits are resting... but ELECTRIC FOREST 2026 IS COMING! Happy Forest! 🌲' }])
+  socket.on('connect', () => {
+    console.log('[Forest Socket] connected', socket.id)
+  })
+
+  // DEBUG: log meta + (optional) all events
+  socket.on('forest:meta', (payload) => {
+    console.log('[forest:meta]', payload)
+  })
+  // If you want full visibility while debugging:
+  socket.onAny((event, payload) => {
+    if (event.startsWith('forest:')) console.log('[WS]', event, payload)
+  })
+
+  socket.on('forest:started', ({ requestId }) => {
+    if (requestId !== activeRequestRef.current) return
+    setIsStreaming(true)
+    setIsLoading(false) // ensure we do NOT show second bubble
+  })
+
+  socket.on('forest:delta', ({ requestId, delta }) => {
+    if (!requestId || requestId !== activeRequestRef.current) return
+    if (!delta) return
+
+    setMessages(prev => {
+      const next = [...prev]
+      const last = next[next.length - 1]
+      if (last?.type === 'forest') {
+        next[next.length - 1] = { ...last, text: (last.text || '') + delta }
       }
-    } catch (e) {
-      setMessages(prev => [...prev, { type: 'forest', text: 'Lost in the trees for a moment... but you know what never gets lost? The HYPE for Electric Forest 2026! HAPPY FOREST! 🌲✨🎶' }])
-    }
+      return next
+    })
+  })
 
+  socket.on('forest:done', ({ requestId, response }) => {
+    if (!requestId || requestId !== activeRequestRef.current) return
+    activeRequestRef.current = null
+    setIsStreaming(false)
     setIsLoading(false)
+
+    if (typeof response === 'string') {
+      setMessages(prev => {
+        const next = [...prev]
+        const last = next[next.length - 1]
+        if (last?.type === 'forest') {
+          next[next.length - 1] = { ...last, text: response }
+        }
+        return next
+      })
+    }
+  })
+
+  socket.on('forest:error', ({ requestId, error }) => {
+    if (requestId && requestId !== activeRequestRef.current) return
+    activeRequestRef.current = null
+    setIsStreaming(false)
+    setIsLoading(false)
+    setMessages(prev => [...prev, { type: 'forest', text: `Forest error: ${error || 'unknown'}` }])
+  })
+
+  return () => {
+    try {
+      if (activeRequestRef.current) socket.emit('forest:cancel', { requestId: activeRequestRef.current })
+      socket.removeAllListeners()
+      socket.disconnect()
+    } catch {}
+    socketRef.current = null
   }
+}, [authenticated])
+
+const sendMessage = async () => {
+  if (!input.trim() || isLoading) return;
+
+  const userMessage = input.trim();
+  setInput('');
+  setMessages(prev => [...prev, { type: 'user', text: userMessage }]);
+
+  // One placeholder forest message
+  setMessages(prev => [...prev, { type: 'forest', text: '🌲 Gathering forest wisdom...' }]);
+  setIsLoading(true);
+
+  try {
+    const res = await fetch(`${getApiUrl()}/forest/chat`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ message: userMessage })
+    });
+
+    const data = await res.json();
+
+    setMessages(prev => {
+      const next = [...prev];
+      // Replace the placeholder (last forest message)
+      next[next.length - 1] = { type: 'forest', text: data.response || 'The forest spirits are resting...' };
+      return next;
+    });
+  } catch {
+    setMessages(prev => {
+      const next = [...prev];
+      next[next.length - 1] = { type: 'forest', text: 'Lost in the trees for a moment...' };
+      return next;
+    });
+  } finally {
+    setIsLoading(false);
+  }
+};
+
+  
 
   // Password Gate
   if (!authenticated) {
@@ -280,16 +385,16 @@ export default function CornDogSquad() {
                     fontSize: '0.95rem',
                     lineHeight: 1.5
                   }}>
-                    {msg.type === 'forest' && (
-                      <span style={{ marginRight: '0.5rem' }}>🌲</span>
-                    )}
+                  {msg.type === 'forest' && msg.text?.trim() && (
+                    <span style={{ marginRight: '0.5rem' }}>🌲</span>
+                  )}
                     {msg.text}
                   </div>
                 </motion.div>
               ))}
             </AnimatePresence>
 
-            {isLoading && (
+            {isLoading && !isStreaming && (
               <motion.div
                 initial={{ opacity: 0 }}
                 animate={{ opacity: 1 }}

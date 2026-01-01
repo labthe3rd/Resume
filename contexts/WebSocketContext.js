@@ -1,119 +1,197 @@
 'use client'
 
-import { createContext, useContext, useEffect, useState, useCallback, useRef } from 'react'
+import { createContext, useContext, useEffect, useMemo, useRef, useState, useCallback } from 'react'
+import { io } from 'socket.io-client'
 
 const WebSocketContext = createContext(null)
 
+function getBaseUrl() {
+  const isLocal = typeof window !== 'undefined' && window.location.hostname === 'localhost'
+  // IMPORTANT: this should be the HTTP(S) origin, NOT a ws:// URL.
+  // Socket.IO will upgrade to WebSocket automatically.
+  return (
+    process.env.NEXT_PUBLIC_WS_BASE_URL ||
+    (isLocal ? 'http://localhost:3101' : 'https://api.louisbersine.com')
+  )
+}
+
 export function WebSocketProvider({ children }) {
   const [connected, setConnected] = useState(false)
+
+  // Last payloads received (optional cache)
   const [controlData, setControlData] = useState(null)
   const [tankData, setTankData] = useState(null)
-  const wsRef = useRef(null)
-  const reconnectTimerRef = useRef(null)
-  const listenersRef = useRef({ control: [], tank: [] })
 
-  const connect = useCallback(() => {
-    // Clear any pending reconnect
-    if (reconnectTimerRef.current) {
-      clearTimeout(reconnectTimerRef.current)
-      reconnectTimerRef.current = null
-    }
+  // Socket.IO instance
+  const socketRef = useRef(null)
 
-    const isLocal = typeof window !== 'undefined' && window.location.hostname === 'localhost'
-    const wsUrl = process.env.NEXT_PUBLIC_WS_URL ||
-      (isLocal ? 'ws://localhost:3101/ws' : 'wss://api.louisbersine.com/ws')
+  // Subscription counters (reference-counted feature toggles)
+  const subsRef = useRef({ control: 0, tank: 0 })
 
-    console.log('[WebSocket] Connecting to:', wsUrl)
-    const ws = new WebSocket(wsUrl)
-    wsRef.current = ws
+  // Listener registries
+  const listenersRef = useRef({ control: new Set(), tank: new Set() })
 
-    ws.onopen = () => {
-      console.log('[WebSocket] Connected')
+  // Whether socket is actually connected
+  const isConnectedRef = useRef(false)
+
+  const baseUrl = useMemo(() => getBaseUrl(), [])
+
+  const ensureConnected = useCallback(() => {
+    // Only connect when at least one stream is needed.
+    const needAny = subsRef.current.control > 0 || subsRef.current.tank > 0
+    if (!needAny) return
+
+    if (socketRef.current) return
+
+    const socket = io(baseUrl, {
+      path: '/ws',
+      transports: ['websocket'],     // force websocket (optional)
+      reconnection: true,
+      reconnectionDelay: 1000,
+      reconnectionDelayMax: 4000,
+      timeout: 6000,
+      withCredentials: true,
+    })
+
+    socketRef.current = socket
+
+    socket.on('connect', () => {
+      isConnectedRef.current = true
       setConnected(true)
-    }
 
-    ws.onmessage = (event) => {
-      try {
-        const data = JSON.parse(event.data)
+      // Tell edge server what we want right now.
+      // This requires edge support (see note below). Harmless if ignored.
+      socket.emit('subscribe', {
+        control: subsRef.current.control > 0,
+        tank: subsRef.current.tank > 0,
+      })
+    })
 
-        if (data.type === 'control') {
-          setControlData(data)
-          // Notify all control listeners
-          listenersRef.current.control.forEach(callback => callback(data))
-        } else if (data.type === 'tank') {
-          setTankData(data)
-          // Notify all tank listeners
-          listenersRef.current.tank.forEach(callback => callback(data))
-        }
-      } catch (e) {
-        console.error('[WebSocket] Parse error:', e)
-      }
-    }
-
-    ws.onclose = () => {
-      console.log('[WebSocket] Disconnected')
+    socket.on('disconnect', () => {
+      isConnectedRef.current = false
       setConnected(false)
-      wsRef.current = null
-      // Reconnect after 2 seconds
-      reconnectTimerRef.current = setTimeout(connect, 2000)
+    })
+
+    // Edge server should emit these events (per your updated edge ws):
+    socket.on('control', (data) => {
+      setControlData(data)
+      for (const cb of listenersRef.current.control) cb(data)
+    })
+
+    socket.on('tank', (data) => {
+      setTankData(data)
+      for (const cb of listenersRef.current.tank) cb(data)
+    })
+
+    socket.on('connect_error', (err) => {
+      // Keep console logging minimal but useful
+      console.error('[Socket.IO] connect_error:', err?.message || err)
+    })
+  }, [baseUrl])
+
+  const maybeDisconnect = useCallback(() => {
+    const needAny = subsRef.current.control > 0 || subsRef.current.tank > 0
+    if (needAny) {
+      // Update subscription intent if already connected
+      const s = socketRef.current
+      if (s && isConnectedRef.current) {
+        s.emit('subscribe', {
+          control: subsRef.current.control > 0,
+          tank: subsRef.current.tank > 0,
+        })
+      }
+      return
     }
 
-    ws.onerror = (error) => {
-      console.error('[WebSocket] Error:', error)
+    if (socketRef.current) {
+      try {
+        socketRef.current.removeAllListeners()
+        socketRef.current.disconnect()
+      } catch {}
+      socketRef.current = null
+      isConnectedRef.current = false
+      setConnected(false)
     }
   }, [])
 
   useEffect(() => {
-    connect()
-
+    // No auto-connect on mount. Connect only when something subscribes.
     return () => {
-      console.log('[WebSocket] Cleanup')
-      if (reconnectTimerRef.current) {
-        clearTimeout(reconnectTimerRef.current)
-        reconnectTimerRef.current = null
+      // Cleanup on provider unmount
+      if (socketRef.current) {
+        try {
+          socketRef.current.removeAllListeners()
+          socketRef.current.disconnect()
+        } catch {}
+        socketRef.current = null
       }
-      if (wsRef.current) {
-        wsRef.current.close()
-        wsRef.current = null
-      }
-    }
-  }, [connect])
-
-  const subscribe = useCallback((type, callback) => {
-    if (type === 'control') {
-      listenersRef.current.control.push(callback)
-    } else if (type === 'tank') {
-      listenersRef.current.tank.push(callback)
-    }
-
-    // Return unsubscribe function
-    return () => {
-      if (type === 'control') {
-        listenersRef.current.control = listenersRef.current.control.filter(cb => cb !== callback)
-      } else if (type === 'tank') {
-        listenersRef.current.tank = listenersRef.current.tank.filter(cb => cb !== callback)
-      }
+      isConnectedRef.current = false
+      setConnected(false)
+      listenersRef.current.control.clear()
+      listenersRef.current.tank.clear()
+      subsRef.current.control = 0
+      subsRef.current.tank = 0
     }
   }, [])
 
-  const value = {
-    connected,
-    controlData,
-    tankData,
-    subscribe
-  }
+  /**
+   * Subscribe to "control" or "tank" stream.
+   * This is page-driven: only pages that subscribe will cause the socket to connect.
+   */
+  const subscribe = useCallback(
+    (type, callback) => {
+      if (type !== 'control' && type !== 'tank') {
+        throw new Error(`subscribe(type): invalid type "${type}"`)
+      }
 
-  return (
-    <WebSocketContext.Provider value={value}>
-      {children}
-    </WebSocketContext.Provider>
+      listenersRef.current[type].add(callback)
+      subsRef.current[type] += 1
+
+      // Connect (or update intent) when first subscriber arrives.
+      ensureConnected()
+
+      // If already connected, update server about needed streams.
+      if (socketRef.current && isConnectedRef.current) {
+        socketRef.current.emit('subscribe', {
+          control: subsRef.current.control > 0,
+          tank: subsRef.current.tank > 0,
+        })
+      }
+
+      // Return unsubscribe
+      return () => {
+        listenersRef.current[type].delete(callback)
+        subsRef.current[type] = Math.max(0, subsRef.current[type] - 1)
+
+        // If still connected, update intent. If nobody needs anything, disconnect.
+        if (socketRef.current && isConnectedRef.current) {
+          socketRef.current.emit('subscribe', {
+            control: subsRef.current.control > 0,
+            tank: subsRef.current.tank > 0,
+          })
+        }
+
+        maybeDisconnect()
+      }
+    },
+    [ensureConnected, maybeDisconnect]
   )
+
+  const value = useMemo(
+    () => ({
+      connected,
+      controlData,
+      tankData,
+      subscribe,
+    }),
+    [connected, controlData, tankData, subscribe]
+  )
+
+  return <WebSocketContext.Provider value={value}>{children}</WebSocketContext.Provider>
 }
 
 export function useWebSocket() {
   const context = useContext(WebSocketContext)
-  if (!context) {
-    throw new Error('useWebSocket must be used within WebSocketProvider')
-  }
+  if (!context) throw new Error('useWebSocket must be used within WebSocketProvider')
   return context
 }

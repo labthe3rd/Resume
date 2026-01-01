@@ -251,6 +251,7 @@ export default function LiquidTankMonitor({ fullPage = false }) {
     }
   }, [wsConnected])
 
+
   // Handle tank data updates from context
   useEffect(() => {
     if (!tankData) return
@@ -258,13 +259,6 @@ export default function LiquidTankMonitor({ fullPage = false }) {
     const tankStateData = tankData.tank || tankData
     setTankState(tankStateData)
 
-    // Sync faults from server state
-    if (tankStateData.faults) {
-      setFaults(prev => ({
-        ...prev,
-        ...tankStateData.faults
-      }))
-    }
 
     if (tankData.aiAnalysis) {
       setAiAnalysis(tankData.aiAnalysis)
@@ -278,7 +272,6 @@ export default function LiquidTankMonitor({ fullPage = false }) {
       setSupervisorStatus(tankData.supervisor)
     }
 
-    // Handle anomaly updates directly inline to avoid forward reference
     if (tankData.anomalyState) {
       const anomalyState = tankData.anomalyState
       const currentAiAnalysis = tankData.aiAnalysis
@@ -368,76 +361,64 @@ export default function LiquidTankMonitor({ fullPage = false }) {
       console.log('Alarm disabled, skipping escalation')
       return
     }
-    
+
     const now = Date.now()
-    
+
     if (anomalyState.hasAnomaly) {
       setAlarmState(prev => {
-        // Use local start time only, never from backend
         const startTime = prev.anomalyStartTime || now
         const duration = (now - startTime) / 1000
-        
-        // Calculate level based ONLY on local duration
+
         let newLevel = 0
         if (duration >= 15) newLevel = 3
         else if (duration >= 10) newLevel = 2
         else if (duration >= 5) newLevel = 1
-        
-        console.log('Escalation check:', { 
-          duration: duration.toFixed(1), 
-          newLevel, 
+
+        console.log('Escalation check:', {
+          duration: duration.toFixed(1),
+          newLevel,
           prevLevel: prev.escalationLevel,
           triggered: Array.from(triggeredLevelsRef.current)
         })
-        
-        // Only trigger if:
-        // 1. This is a NEW level (higher than previous)
-        // 2. We haven't already triggered this level (using ref)
+
         if (newLevel > prev.escalationLevel && !triggeredLevelsRef.current.has(newLevel)) {
           console.log('Triggering escalation level:', newLevel)
           triggeredLevelsRef.current.add(newLevel)
-          
+
           if (newLevel === 1) {
-            setChatMessages(msgs => [...msgs, { 
-              type: 'alert', 
-              text: '⚠️ HMI ALERT: Unusual activity detected! Displaying warning on operator screen.' 
+            setChatMessages(msgs => [...msgs, {
+              type: 'alert',
+              text: '⚠️ HMI ALERT: Unusual activity detected! Displaying warning on operator screen.'
             }])
           } else if (newLevel === 2) {
-            setChatMessages(msgs => [...msgs, { 
-              type: 'alert', 
-              text: '📧 EMAIL/SMS SENT: Notifying maintenance team of persistent anomaly.' 
+            setChatMessages(msgs => [...msgs, {
+              type: 'alert',
+              text: '📧 EMAIL/SMS SENT: Notifying maintenance team of persistent anomaly.'
             }])
           } else if (newLevel === 3) {
-            setChatMessages(msgs => [...msgs, { 
-              type: 'alert', 
-              text: '📞 PHONE CALL INITIATED: Critical situation - calling supervisor.' 
+            setChatMessages(msgs => [...msgs, {
+              type: 'alert',
+              text: '📞 PHONE CALL INITIATED: Critical situation - calling supervisor.'
             }])
-            
-            // Build TTS message with AI analysis (cleaned)
+
             let ttsMessage = 'Critical alert! Unusual activity detected in liquid tank system.'
             if (currentAiAnalysis?.reasoning && currentAiAnalysis.reasoning !== 'Analysis unavailable') {
               let cleanReasoning = currentAiAnalysis.reasoning
-              // Remove closed think tags (multiline)
               cleanReasoning = cleanReasoning.replace(/<think>[\s\S]*?<\/think>/gim, '')
-              // Remove unclosed think tags
               cleanReasoning = cleanReasoning.replace(/<think>[\s\S]*/gim, '')
-              // Remove orphaned </think>
               cleanReasoning = cleanReasoning.replace(/<\/think>/gi, '')
-              // Remove any HTML/XML tags
               cleanReasoning = cleanReasoning.replace(/<[^>]*>/g, '')
-              // Remove common prefixes
               cleanReasoning = cleanReasoning.replace(/^(Analysis:|Response:|Answer:|Output:|Assessment:)\s*/i, '')
-              // Normalize whitespace
               cleanReasoning = cleanReasoning.replace(/\s+/g, ' ').trim()
               if (cleanReasoning && cleanReasoning.length > 5) {
                 ttsMessage += ` ${cleanReasoning}`
               }
             }
             ttsMessage += ' Supervisor notification initiated.'
-            speak(ttsMessage)
+            speak(tttsMessage)
           }
         }
-        
+
         return {
           ...prev,
           anomalyDetected: true,
@@ -446,7 +427,6 @@ export default function LiquidTankMonitor({ fullPage = false }) {
         }
       })
     } else {
-      // Clear triggered levels when anomaly resolves - only if we had an anomaly before
       setAlarmState(prev => {
         if (prev.anomalyDetected) {
           console.log('Anomaly resolved, clearing escalation')
@@ -463,7 +443,7 @@ export default function LiquidTankMonitor({ fullPage = false }) {
     }
   }, [alarmState.alarmDisabled, speak])
 
-  // Fault injection handlers
+   // Fault injection handlers
   const toggleHighSensorDisabled = () => {
     const newVal = !faults.highSensorDisabled
     setFaults(prev => ({ ...prev, highSensorDisabled: newVal }))
@@ -776,7 +756,7 @@ export default function LiquidTankMonitor({ fullPage = false }) {
               </div>
               
               {/* Start/Stop Button */}
-              <button
+              {/* <button
                 onClick={toggleFillingPaused}
                 style={{
                   marginTop: '0.75rem',
@@ -800,7 +780,7 @@ export default function LiquidTankMonitor({ fullPage = false }) {
                 ) : (
                   <>⏸ Stop Filling</>
                 )}
-              </button>
+              </button> */}
               
               {/* Status indicators */}
               <div style={{ 

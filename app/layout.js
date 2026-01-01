@@ -1,8 +1,11 @@
+// file: ./app/layout.js
 import './globals.css'
+import Providers from './providers'
 
 export const metadata = {
   title: 'Louis Bersine | Controls & OT Expert',
-  description: 'Controls Engineer & OT Security Specialist with a decade of experience in industrial automation, PLC programming, and OT network administration.',
+  description:
+    'Controls Engineer & OT Security Specialist with a decade of experience in industrial automation, PLC programming, and OT network administration.',
   keywords: 'Controls Engineer, OT Security, PLC Programming, Industrial Automation, Rockwell, Siemens, SCADA',
   authors: [{ name: 'Louis Bersine' }],
   openGraph: {
@@ -20,7 +23,7 @@ export default function RootLayout({ children }) {
         <div className="gradient-blob blob-1" />
         <div className="gradient-blob blob-2" />
         <div className="gradient-blob blob-3" />
-        {children}
+        <Providers>{children}</Providers>
       </body>
     </html>
   )

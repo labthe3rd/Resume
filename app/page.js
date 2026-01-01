@@ -1,9 +1,9 @@
+// file: ./app/page.js  (main page)
 'use client'
 
-import { useMemo, useRef,useState, useEffect } from 'react'
+import { useState, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import dynamic from 'next/dynamic'
-import { WebSocketProvider } from '../contexts/WebSocketContext'
 import Navigation from '../components/Navigation'
 import Hero from '../components/Hero'
 import About from '../components/About'
@@ -16,14 +16,24 @@ import ControlSystem from '../components/ControlSystem'
 import LiquidTankMonitor from '../components/LiquidTankMonitor'
 import Chatbot from '../components/Chatbot'
 import SystemArchitectureMap from '../components/SystemArchitectureMap'
+import { useWebSocket } from '../contexts/WebSocketContext'
 
 const Scene3D = dynamic(() => import('../components/Scene3D'), { ssr: false })
-
-
 
 export default function Home() {
   const [isLoading, setIsLoading] = useState(true)
   const [activeSection, setActiveSection] = useState('hero')
+  const { subscribe } = useWebSocket()
+
+  // Main page needs BOTH streams
+  useEffect(() => {
+    const unsubControl = subscribe('control', () => {})
+    const unsubTank = subscribe('tank', () => {})
+    return () => {
+      unsubControl()
+      unsubTank()
+    }
+  }, [subscribe])
 
   useEffect(() => {
     const timer = setTimeout(() => setIsLoading(false), 2000)
@@ -52,7 +62,7 @@ export default function Home() {
   }, [])
 
   return (
-    <WebSocketProvider>
+    <>
       <AnimatePresence>
         {isLoading && (
           <motion.div
@@ -124,6 +134,6 @@ export default function Home() {
       </main>
 
       <Chatbot />
-    </WebSocketProvider>
+    </>
   )
 }

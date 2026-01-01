@@ -5,6 +5,7 @@ import { useInView } from 'framer-motion'
 import { useRef, useState, useEffect } from 'react'
 import { RotateCcw, Brain, Zap, AlertTriangle, Send, RefreshCw, Thermometer, Flame } from 'lucide-react'
 import { useWebSocket } from '../contexts/WebSocketContext'
+import HeaterPowerGraph from './HeaterPowerGraph';
 
 export default function ControlSystem({ fullPage = false }) {
   const ref = useRef(null)
@@ -613,6 +614,7 @@ export default function ControlSystem({ fullPage = false }) {
             </div>
           </div>
         </motion.div>
+        <HeaterPowerGraph heaterPower={systemState?.heaterPower} />
       </div>
 
       <style jsx>{`
