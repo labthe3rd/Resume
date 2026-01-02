@@ -1,0 +1,14 @@
+{
+  "title": "Vision Systems",
+  "icon": "Eye",
+  "color": "#a855f7",
+  "skills": [
+    "Keyence Vision",
+    "Cognex Vision",
+    "GigE Vision",
+    "OCR Implementation",
+    "Barcode / 2D Code Reading",
+    "Lighting & Optics",
+    "Quality Inspection"
+  ]
+}

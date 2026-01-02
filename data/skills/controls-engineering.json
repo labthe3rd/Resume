@@ -1,0 +1,27 @@
+{
+  "title": "Controls Engineering",
+  "icon": "Cpu",
+  "color": "#00d4ff",
+  "skills": [
+    "Studio 5000",
+    "RSLogix 500",
+    "FTView ME",
+    "FTView SE",
+    "FT AssetCentre",
+    "OSIsoft PI",
+    "Ignition",
+    "Kepware",
+    "Fanuc",
+    "IAI Robots",
+    "Denso Robots",
+    "Kinetix",
+    "PowerFlex",
+    "Atlas Copco",
+    "Siemens S7",
+    "Functional Specifications",
+    "FAT/SAT Commissioning",
+    "S88 / Batch Concepts",
+    "Safety Systems Integration",
+    "EtherNet/IP Device Integration"
+  ]
+}

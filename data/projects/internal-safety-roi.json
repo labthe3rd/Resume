@@ -1,0 +1,17 @@
+{
+  "title": "Internal Safety System ROI",
+  "company": "Kellanova",
+  "category": "Kellanova",
+  "icon": "Shield",
+  "color": "#10b981",
+  "problem": "Cutting conveyor utilized a high-risk single-channel safety system susceptible to undetected failure.",
+  "solution": "Designed and internally executed a Guard Link intelligent safety upgrade, bypassing the need for high-cost external contractors.",
+  "benefit": "Achieved Category 3/4 safety compliance with an 85% cost reduction compared to external quotes.",
+  "monetaryValue": "270,000",
+  "monetaryWord": "Savings",
+  "tags": [
+    "ROI Optimization",
+    "Guard Link",
+    "Functional Safety"
+  ]
+}

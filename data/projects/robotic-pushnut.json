@@ -1,0 +1,17 @@
+{
+  "title": "Robotic Pushnut Cell",
+  "company": "Altron",
+  "category": "Altron",
+  "icon": "Bot",
+  "color": "#ec4899",
+  "problem": "Automotive seat assembly line needed autonomous pushnut installation.",
+  "solution": "Designed, programmed and commissioned robotic cell on automotive seat assembly line.",
+  "benefit": "Fully autonomous operation with high precision pushnut installation.",
+  "monetaryValue": "350,000",
+  "monetaryWord": "Project",
+  "tags": [
+    "Robotics",
+    "Automotive",
+    "Assembly Line"
+  ]
+}

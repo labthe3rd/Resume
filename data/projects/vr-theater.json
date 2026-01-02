@@ -1,0 +1,18 @@
+{
+  "title": "VR Theatrical Performance",
+  "company": "Dennison University",
+  "category": "Freelance",
+  "icon": "Zap",
+  "color": "#a855f7",
+  "problem": "University needed innovative VR system for theatrical performances.",
+  "solution": "Developed fully autonomous virtual reality system to mirror real time theatrical performance in VR. Designed AI generated theatrical performance with LLM-driven dialog changes.",
+  "benefit": "24/7 live AI-powered VR theatrical performance with dynamic dialog each session.",
+  "monetaryValue": null,
+  "monetaryWord": null,
+  "tags": [
+    "VR",
+    "AI",
+    "LLM",
+    "Theater"
+  ]
+}

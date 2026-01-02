@@ -1,0 +1,13 @@
+{
+  "title": "Your Project Title",
+  "company": "Company Name",
+  "category": "Category Name",
+  "icon": "Clock",
+  "color": "#00d4ff",
+  "problem": "What problem did this project solve?",
+  "solution": "How did you solve it?",
+  "benefit": "What was the outcome or benefit?",
+  "monetaryValue": "150,000",
+  "monetaryWord": "Savings",
+  "tags": ["Tag1", "Tag2", "Tag3"]
+}

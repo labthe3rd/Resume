@@ -1,0 +1,17 @@
+{
+  "title": "Engineering Drawing Recovery from Non-Editable PDF Documentation",
+  "company": "General Industrial Environment",
+  "category": "Engineering Productivity",
+  "icon": "FileText",
+  "color": "#a855f7",
+  "problem": "Legacy drawings existed only as PDFs, requiring full redraws for modifications or audits.",
+  "solution": "Developed tooling to convert PDF drawings back into editable CAD formats.",
+  "benefit": "Avoided redraw costs and accelerated engineering change workflows.",
+  "monetaryValue": "50,000",
+  "monetaryWord": "Cost Avoidance",
+  "tags": [
+    "CAD",
+    "Documentation",
+    "Automation"
+  ]
+}

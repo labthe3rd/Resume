@@ -14,6 +14,7 @@ const navItems = [
 ]
 
 const demoItems = [
+  { id: 'architecture-map', label: 'System Architecture' },
   { id: 'tank-monitor', label: 'AI Anomaly Detection' },
   { id: 'control-system', label: 'AI PID Control' },
 ]

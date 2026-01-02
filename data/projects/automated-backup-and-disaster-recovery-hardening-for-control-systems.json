@@ -1,0 +1,17 @@
+{
+  "title": "Automated Backup and Disaster Recovery Hardening for Control Systems",
+  "company": "General Industrial Environment",
+  "category": "Disaster Recovery",
+  "icon": "Clock",
+  "color": "#10b981",
+  "problem": "Manual and inconsistent backups increased recovery time following controller or configuration failures.",
+  "solution": "Expanded automated backup coverage and validated recovery points across control assets.",
+  "benefit": "Reduced mean time to recovery during control system incidents.",
+  "monetaryValue": "100,000",
+  "monetaryWord": "Risk Reduction",
+  "tags": [
+    "Backup",
+    "Resilience",
+    "OT"
+  ]
+}

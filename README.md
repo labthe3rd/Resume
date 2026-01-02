@@ -1,115 +1,363 @@
-# Louis Bersine - Portfolio Website
+# Complete Resume Management System
 
-Modern portfolio website with AI-powered chatbot using RAG (Retrieval-Augmented Generation).
+Full-featured content management system with visual admin panels for your Next.js resume website.
 
-## Features
+## 🎯 Features
 
-- 🎨 **Cinematic Dark Mode** with glassmorphism effects
-- ✨ **3D Particle Background** using Three.js
-- 🎯 **Bento Grid Layout** for skills and projects
-- 🎮 **Interactive PLC Playground** demo
-- 🤖 **AI Chatbot with RAG** powered by Google Gemini
-- 📁 **File Upload Support** - PDF, TXT, MD, CSV, Images (OCR)
-- 📱 **Fully Responsive** design
+### ✨ Content Management
+- **Projects** - Portfolio items with problem/solution/benefit structure
+- **Experience** - Professional timeline with highlights
+- **Skills** - Technical skillset by category
+- **Diagrams** - Interactive storytelling components
 
-## Tech Stack
+### 🎨 Visual Admin Panels
+- **Content Manager** (`/admin/content`)
+  - Live preview as you type
+  - Color picker with presets
+  - Icon selector
+  - Tag/chip manager
+  - Auto-save to JSON
 
-- **Framework:** Next.js 14
-- **AI:** Google Gemini API (Chat + Embeddings + Vision OCR)
-- **Vector DB:** Upstash Vector (free tier)
-- **Animations:** Framer Motion
-- **3D Graphics:** Three.js + React Three Fiber
-- **Deployment:** Vercel
+- **Diagram Builder** (`/admin/diagram-builder`)
+  - Drag & drop nodes
+  - Resize components
+  - Visual editor
+  - Export/import JSON
+  - Live preview
 
-## Setup
+### 🚀 No Database Required
+- All content stored as JSON files
+- Git-friendly
+- Version controllable
+- Easy backup
+- Portable
 
-### 1. Create Upstash Vector Database
-
-1. Go to [console.upstash.com](https://console.upstash.com)
-2. Create a new **Vector** database (NOT Redis!)
-3. Set dimensions to **768**
-4. Copy the REST URL and **Read-Write Token** (not read-only!)
-
-### 2. Get Google API Key
-
-1. Go to [aistudio.google.com/apikey](https://aistudio.google.com/apikey)
-2. Create a new API key
-
-### 3. Set Environment Variables
-
-In Vercel (or `.env.local` for development):
+## 📁 Package Contents
 
 ```
-GOOGLE_API_KEY=your_google_api_key
-UPSTASH_VECTOR_REST_URL=https://xxx.upstash.io
-UPSTASH_VECTOR_REST_TOKEN=xxx_read_write_token
-ADMIN_PASSWORD=your_secure_password
+resume-system-complete/
+├── components/
+│   ├── Projects.js          # Projects component
+│   ├── Experience.js        # Experience timeline
+│   ├── Skills.js            # Skills grid
+│   └── DiagramRenderer.js   # Dynamic diagram renderer
+├── lib/
+│   ├── projectLoader.js
+│   ├── experienceLoader.js
+│   └── skillsLoader.js
+├── app/
+│   ├── api/
+│   │   ├── projects/route.js
+│   │   ├── experience/route.js
+│   │   ├── skills/route.js
+│   │   └── diagrams/route.js
+│   └── admin/
+│       ├── content/page.js        # Content manager
+│       └── diagram-builder/page.js # Diagram builder
+└── data/
+    ├── projects/           # Project JSON files
+    ├── experience/         # Experience JSON files
+    ├── skills/            # Skill JSON files
+    └── diagrams/          # Diagram JSON files
 ```
 
-### 4. Deploy
+## 🔧 Installation
 
-```bash
-npm install
-npm run build
-npm start
+1. **Extract Package:**
+   ```bash
+   unzip resume-system-complete.zip
+   ```
+
+2. **Copy to Project:**
+   Copy all folders to your Next.js project root
+
+3. **Start Server:**
+   ```bash
+   npm run dev
+   ```
+
+4. **Access Admin:**
+   - Content: `http://localhost:3000/admin/content`
+   - Diagrams: `http://localhost:3000/admin/diagram-builder`
+
+## 📖 Quick Start Guide
+
+### Creating Content (30 seconds)
+
+1. Navigate to `/admin/content`
+2. Select tab (Projects/Experience/Skills)
+3. Fill out form
+4. Pick color and icon
+5. Add tags/features
+6. Watch live preview
+7. Click Save
+8. Done!
+
+### Building Diagrams (2 minutes)
+
+1. Navigate to `/admin/diagram-builder`
+2. Click "Add Node"
+3. Drag to position
+4. Resize with corner handle
+5. Click pencil to edit
+6. Set title, icon, color
+7. Add features
+8. Repeat for more nodes
+9. Click "Save"
+10. Done!
+
+## 🎨 Admin Panel Features
+
+### Content Manager
+
+**Live Preview:**
+- Real-time rendering
+- Exact website styling
+- Split-screen layout
+- Instant updates
+
+**Smart Controls:**
+- Color picker (6 presets)
+- Icon picker (visual grid)
+- Tag manager (chips)
+- Auto-save
+
+**Content Types:**
+- Projects: Full project cards
+- Experience: Timeline entries
+- Skills: Category cards
+
+### Diagram Builder
+
+**Canvas:**
+- Infinite workspace
+- Grid background
+- Drag & drop
+- Resize handles
+
+**Node Editor:**
+- Full property editor
+- Color picker
+- Icon selector
+- Feature manager
+
+**Export/Import:**
+- Save to JSON
+- Load from JSON
+- Share diagrams
+
+## 🔌 Using Components
+
+### Projects
+```jsx
+import Projects from '@/components/Projects'
+
+export default function Page() {
+  return <Projects />
+}
 ```
 
-Or push to GitHub and deploy on Vercel.
+### Experience
+```jsx
+import Experience from '@/components/Experience'
 
-## Admin Panel
-
-Access `/admin` with your password to:
-
-- **Upload Files** - Drag & drop or click to browse
-- **Manual Text Entry** - Paste text directly
-- **Test RAG** - Verify retrieval is working
-- **Test Config** - Debug API connections
-- **Clear Database** - Reset all vectors
-
-### Supported File Types
-
-| Format | Processing Method |
-|--------|-------------------|
-| PDF | Gemini AI text extraction |
-| TXT, MD | Direct text reading |
-| CSV | Parsed to readable format |
-| JPG, PNG, GIF, WebP | Gemini Vision OCR |
-
-## Model Configuration
-
-Edit `lib/ai-config.js` to change models:
-
-```javascript
-CHAT_MODEL: 'gemini-2.5-flash-lite',     // Chat responses
-EMBEDDING_MODEL: 'gemini-embedding-001',  // Vector embeddings
-EMBEDDING_DIMENSIONS: 768,                // Must match Upstash DB
+export default function Page() {
+  return <Experience />
+}
 ```
 
-### Available Chat Models
+### Skills
+```jsx
+import Skills from '@/components/Skills'
 
-- `gemini-2.5-flash-lite` - Fast & cheap (recommended)
-- `gemini-2.5-flash` - More capable
-- `gemini-2.0-flash` - Previous generation
-- `gemini-2.0-flash-lite` - Fastest
+export default function Page() {
+  return <Skills />
+}
+```
 
-## API Key Security
+### Diagram
+```jsx
+import DiagramRenderer from '@/components/DiagramRenderer'
+import diagramData from '@/data/diagrams/my-diagram.json'
 
-Your API keys are **never exposed** to the client:
+export default function Page() {
+  return <DiagramRenderer diagramData={diagramData} />
+}
+```
 
-1. Keys stored as server-side environment variables only
-2. All API routes run server-side
-3. Client only communicates with `/api/*` endpoints
-4. Vercel encrypts environment variables at rest
+## 📝 JSON Structure
 
-**Never commit `.env.local` to git!**
+### Project
+```json
+{
+  "title": "Project Name",
+  "company": "Company",
+  "category": "Category",
+  "icon": "Bot",
+  "color": "#00d4ff",
+  "problem": "Problem statement",
+  "solution": "Solution description",
+  "benefit": "Outcome/benefit",
+  "monetaryValue": "150,000",
+  "monetaryWord": "Savings",
+  "tags": ["Tag1", "Tag2"]
+}
+```
 
-## Free Tier Limits
+### Experience
+```json
+{
+  "company": "Company Name",
+  "role": "Job Title",
+  "period": "Start - End",
+  "location": "City, State",
+  "description": "Role description",
+  "highlights": ["Achievement 1", "Achievement 2"],
+  "color": "#00d4ff"
+}
+```
 
-- **Upstash Vector:** 10,000 vectors, 10,000 queries/day
-- **Gemini API:** 1,500 requests/day for embeddings
-- **Gemini Vision:** Included in Gemini quota
-- **Vercel:** 100GB bandwidth, serverless functions included
+### Skills
+```json
+{
+  "title": "Category Name",
+  "icon": "Code2",
+  "color": "#00d4ff",
+  "skills": ["Skill 1", "Skill 2", "Skill 3"]
+}
+```
 
-## License
+### Diagram
+```json
+{
+  "title": "Diagram Title",
+  "subtitle": "Description",
+  "nodes": [
+    {
+      "id": "unique-id",
+      "icon": "Server",
+      "title": "Node Title",
+      "subtitle": "Node Subtitle",
+      "color": "#00d4ff",
+      "description": "Node description",
+      "features": ["Feature 1", "Feature 2"],
+      "position": { "x": 100, "y": 100 },
+      "size": { "width": 280, "height": 180 }
+    }
+  ]
+}
+```
 
-MIT License
+## 🎨 Design System
+
+### Colors
+- Cyan: `#00d4ff` - Tech/modern
+- Blue: `#3b82f6` - Professional
+- Purple: `#a855f7` - Creative
+- Pink: `#ec4899` - Dynamic
+- Green: `#10b981` - Success
+- Orange: `#f97316` - Impact
+- Yellow: `#fbbf24` - Warning
+- Red: `#ef4444` - Critical
+
+### Icons
+Globe, Cloud, Shield, Lock, Server, Network, Bot, Cpu, Database, Zap, ArrowRight, Home, Code2, Eye, Wrench, Castle, Clock, DollarSign
+
+## 📚 Documentation
+
+- `ADMIN_GUIDE.md` - Content manager guide
+- `DIAGRAM_BUILDER_GUIDE.md` - Diagram builder guide
+- `QUICKSTART.md` - Quick reference
+- `FEATURES.md` - Feature overview
+
+## 🚢 Deployment
+
+### Local Development
+1. Make changes via admin panels
+2. Files save to `/data/` folders
+3. Restart dev server
+4. View on website
+
+### Production (Vercel)
+1. Create/edit content locally
+2. Commit JSON files to Git
+3. Push to repository
+4. Vercel auto-deploys
+5. Changes live in ~2 minutes
+
+## 💡 Tips
+
+**Content:**
+- Keep titles short
+- Use consistent colors
+- 2-4 features per item
+- Professional language
+
+**Diagrams:**
+- Space nodes 50-100px apart
+- Use color to indicate layers
+- Align with grid
+- Group related nodes
+
+**Workflow:**
+- Create content in batches
+- Use templates for consistency
+- Export JSON for backup
+- Test before deploying
+
+## 🔧 Troubleshooting
+
+**Changes not showing?**
+- Restart dev server
+- Clear browser cache
+- Check console for errors
+
+**Save failed?**
+- Check all required fields
+- Verify unique titles
+- Check file permissions
+
+**Import not working?**
+- Verify JSON format
+- Check file extension
+- Validate JSON syntax
+
+## 🎓 Learning Resources
+
+### For Non-Technical Users
+- Visual admin panels
+- No code required
+- Click to select
+- Live preview
+- Auto-save
+
+### For Developers
+- Clean code structure
+- API documented
+- Extensible design
+- TypeScript compatible
+- React best practices
+
+## 📦 What's Included
+
+- ✅ 4 Content types
+- ✅ 2 Admin panels
+- ✅ 18 Example content files
+- ✅ 4 API routes
+- ✅ 3 Data loaders
+- ✅ 4 React components
+- ✅ Complete documentation
+- ✅ Templates
+- ✅ No dependencies
+
+## 🚀 Get Started
+
+1. Extract package
+2. Copy to project
+3. Run `npm run dev`
+4. Visit `/admin/content`
+5. Create your first content!
+
+**Total setup time: 2 minutes**
+**First content: 30 seconds**
+**First diagram: 2 minutes**

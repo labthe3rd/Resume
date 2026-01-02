@@ -1,0 +1,13 @@
+{
+  "title": "PTP Grandmaster Incident Response",
+  "company": "Kellanova",
+  "category": "Kellanova",
+  "icon": "Clock",
+  "color": "#00d4ff",
+  "problem": "A critical high-speed production line suffered catastrophic \"phantom\" position failures that mimicked mechanical breakage, threatening $450,000/hr in lost retail output.",
+  "solution": "Performed deep-packet analysis via Asset Centre to isolate a rogue PLC broadcast. Corrected the Best Master Clock Algorithm (BMCA) conflict and engineered network guards to prevent future grandmaster takeovers.",
+  "benefit": "Executed a definitive 8-hour recovery where industry averages for such \"ghost\" timing errors exceed 48 hours—saving an estimated $5M+ in potential downtime and lost product.",
+  "monetaryValue": "350,000/hr",
+  "monetaryWord": "Loss Prevented",
+  "tags": ["Precision Time Protocol", "PTP/BMCA", "Digital Forensics", "Network Hardening"]
+}

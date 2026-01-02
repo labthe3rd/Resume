@@ -1,0 +1,17 @@
+{
+  "title": "Fail-Safe Overflow Prevention Logic for Bulk Process Operations",
+  "company": "General Industrial Environment",
+  "category": "Process Safety",
+  "icon": "AlertTriangle",
+  "color": "#f97316",
+  "problem": "Loss of scale or sensor feedback could result in uncontrolled filling and overflow events.",
+  "solution": "Implemented defensive logic to halt operations and fail safely upon signal loss.",
+  "benefit": "Prevented material waste, cleanup labor, and sanitation-related downtime.",
+  "monetaryValue": "120,000",
+  "monetaryWord": "Waste Avoidance",
+  "tags": [
+    "Safety",
+    "Process Control",
+    "Risk Reduction"
+  ]
+}

@@ -1,0 +1,79 @@
+{
+  "title": "test_group",
+  "subtitle": "Diagram description",
+  "nodes": [
+    {
+      "id": "node-1767331203781",
+      "icon": "Server",
+      "title": "New Node",
+      "subtitle": "Subtitle",
+      "color": "#a855f7",
+      "description": "Node description",
+      "features": [
+        "Feature 1",
+        "Feature 2"
+      ],
+      "position": {
+        "x": 400,
+        "y": 500
+      },
+      "size": {
+        "width": 225,
+        "height": 200
+      },
+      "layer": "default"
+    },
+    {
+      "id": "node-1767331204890",
+      "icon": "Cloud",
+      "title": "New Node",
+      "subtitle": "Subtitle",
+      "color": "#f97316",
+      "description": "Node description",
+      "features": [
+        "Feature 1",
+        "Feature 2",
+        "New Feature"
+      ],
+      "position": {
+        "x": 400,
+        "y": 300
+      },
+      "size": {
+        "width": 225,
+        "height": 175
+      },
+      "layer": "default"
+    },
+    {
+      "id": "node-1767334013568",
+      "icon": "Server",
+      "title": "New Node",
+      "subtitle": "Subtitle",
+      "color": "#00d4ff",
+      "description": "Node description",
+      "features": [
+        "Feature 1",
+        "Feature 2"
+      ],
+      "position": {
+        "x": 100,
+        "y": 300
+      },
+      "size": {
+        "width": 275,
+        "height": 425
+      },
+      "layer": "default"
+    }
+  ],
+  "connections": [],
+  "layers": [
+    {
+      "id": "default",
+      "name": "Default Layer",
+      "visible": true,
+      "locked": false
+    }
+  ]
+}

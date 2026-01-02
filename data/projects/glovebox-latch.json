@@ -1,0 +1,17 @@
+{
+  "title": "Glovebox Latch Rotary System",
+  "company": "Proficient",
+  "category": "Proficient",
+  "icon": "Cpu",
+  "color": "#3b82f6",
+  "problem": "Fully autonomous glovebox latch system was not meeting customer metrics.",
+  "solution": "Took ownership of glovebox latch rotary system that ran autonomously. Worked with customers on site to re-program system and find mechanical flaws.",
+  "benefit": "Customer met metrics promised for system after reprogramming and mechanical adjustments.",
+  "monetaryValue": "550,000",
+  "monetaryWord": "Impact",
+  "tags": [
+    "Autonomous",
+    "Automotive",
+    "PLC Programming"
+  ]
+}

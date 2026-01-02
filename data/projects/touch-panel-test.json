@@ -1,0 +1,18 @@
+{
+  "title": "Touch Panel Test Station",
+  "company": "Proficient",
+  "category": "Proficient",
+  "icon": "Eye",
+  "color": "#f97316",
+  "problem": "Customer needed automated testing for electric vehicle touch screen panels.",
+  "solution": "Designed electrical schematics and programming for system that interfaced with customer touch screen panels for electric vehicles and verified functionality.",
+  "benefit": "Fully automated testing process with comprehensive functionality verification.",
+  "monetaryValue": "120,000",
+  "monetaryWord": "Project",
+  "tags": [
+    "EV",
+    "Touch Panels",
+    "Testing",
+    "Automation"
+  ]
+}

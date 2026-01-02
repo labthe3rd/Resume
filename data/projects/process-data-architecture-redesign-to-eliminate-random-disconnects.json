@@ -1,0 +1,17 @@
+{
+  "title": "Process Data Architecture Redesign to Eliminate Random Disconnects",
+  "company": "General Industrial Environment",
+  "category": "Controls Architecture",
+  "icon": "Database",
+  "color": "#3b82f6",
+  "problem": "Direct device-to-system data connections caused intermittent disconnects and recurring micro-stoppages.",
+  "solution": "Redesigned data flow to route signals through a controller layer before downstream systems.",
+  "benefit": "Eliminated random disconnects and improved overall process stability.",
+  "monetaryValue": "180,000",
+  "monetaryWord": "Recovered Throughput",
+  "tags": [
+    "Architecture",
+    "Uptime",
+    "Automation"
+  ]
+}

@@ -1,0 +1,51 @@
+{
+  "title": "System Architecture",
+  "subtitle": "Secure infrastructure connecting edge services to private AI compute",
+  "nodes": [
+    {
+      "id": "client",
+      "icon": "Globe",
+      "title": "User Browser",
+      "subtitle": "Web Application",
+      "color": "#00d4ff",
+      "description": "React/Next.js frontend served via CDN. Establishes WebSocket connection for real-time updates.",
+      "features": ["HTTPS/WSS", "Real-time UI", "CDN Cached"],
+      "position": { "x": 100, "y": 100 },
+      "size": { "width": 280, "height": 180 }
+    },
+    {
+      "id": "proxy",
+      "icon": "Shield",
+      "title": "Caddy Proxy",
+      "subtitle": "Reverse Proxy",
+      "color": "#10b981",
+      "description": "TLS termination and request routing. Single public entrypoint for enhanced security.",
+      "features": ["TLS 1.3", "Rate Limiting", "WebSocket"],
+      "position": { "x": 420, "y": 100 },
+      "size": { "width": 280, "height": 180 }
+    },
+    {
+      "id": "api",
+      "icon": "Server",
+      "title": "API Gateway",
+      "subtitle": "Node.js Backend",
+      "color": "#ef4444",
+      "description": "Main application server handling REST APIs, WebSocket connections, and AI orchestration.",
+      "features": ["Express.js", "WebSocket", "Orchestration"],
+      "position": { "x": 100, "y": 320 },
+      "size": { "width": 280, "height": 180 }
+    },
+    {
+      "id": "ai",
+      "icon": "Bot",
+      "title": "Ollama LLM",
+      "subtitle": "AI Inference",
+      "color": "#ec4899",
+      "description": "Local LLM running in container. Handles PID tuning decisions and anomaly detection.",
+      "features": ["LLaMA 3.2", "GPU Accel", "Private"],
+      "position": { "x": 420, "y": 320 },
+      "size": { "width": 280, "height": 180 }
+    }
+  ],
+  "connections": []
+}

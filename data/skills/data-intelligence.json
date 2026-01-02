@@ -1,0 +1,30 @@
+{
+  "title": "Data & Intelligence",
+  "icon": "Code2",
+  "color": "#3b82f6",
+  "skills": [
+    "LLM Integrations",
+    "Python (Data Analysis)",
+    "SQL",
+    "PowerShell",
+    "Predictive Maintenance",
+    "Power BI",
+    "REST APIs",
+    "Time-Series Data Modeling",
+    "Data Pipelines (ETL/ELT)",
+    "MQTT / Sparkplug B",
+    "Grafana Dashboards",
+    "Docker",
+    "Git / Version Control",
+    "CI/CD Fundamentals",
+    "Data Quality & Validation",
+    "C#",
+    "C++",
+    "JavaScript",
+    "VBA",
+    "AutoLISP",
+    "Batch",
+    "Bash",
+    "Power Automate"
+  ]
+}

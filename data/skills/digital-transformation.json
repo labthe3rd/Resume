@@ -1,0 +1,29 @@
+{
+  "title": "Digital Transformation & OT",
+  "icon": "Network",
+  "color": "#10b981",
+  "skills": [
+    "OPC-UA",
+    "Ignition Perspective",
+    "OSIsoft PI",
+    "Network Segmentation",
+    "OT DMZ Design",
+    "VLANs",
+    "Switching & Routing",
+    "TCP/IP",
+    "DNS/DHCP",
+    "NAT",
+    "Firewall Rule Design",
+    "VPNs",
+    "Secure Remote Access",
+    "PTP (IEEE 1588)",
+    "NTP",
+    "SNMP",
+    "Syslog",
+    "Wireshark / Packet Capture",
+    "Multicast (IGMP Snooping)",
+    "Active Directory",
+    "EtherNet/IP",
+    "CAN bus"
+  ]
+}

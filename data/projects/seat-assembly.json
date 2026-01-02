@@ -1,0 +1,17 @@
+{
+  "title": "Autonomous Seat Assembly Station",
+  "company": "Altron",
+  "category": "Altron",
+  "icon": "Wrench",
+  "color": "#00d4ff",
+  "problem": "Semi truck seat frames required autonomous screw assembly.",
+  "solution": "Designed, programmed and ran FAT for autonomous screw station that assembled semi seat frames autonomously.",
+  "benefit": "Successful FAT completion with fully autonomous operation.",
+  "monetaryValue": "400,000",
+  "monetaryWord": "Project",
+  "tags": [
+    "FAT",
+    "Autonomous",
+    "Assembly"
+  ]
+}

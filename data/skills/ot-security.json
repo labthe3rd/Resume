@@ -1,0 +1,20 @@
+{
+  "title": "OT Security",
+  "icon": "Shield",
+  "color": "#f97316",
+  "skills": [
+    "Risk Assessments",
+    "Zones",
+    "Least Privilege",
+    "Secure Remote Access",
+    "Asset Inventory",
+    "Vulnerability Management",
+    "Patch Management",
+    "Backup & Restore Testing",
+    "Incident Response",
+    "Network Monitoring",
+    "Disaster Recovery",
+    "Internal Compliance Evidence & Audits",
+    "Claroty"
+  ]
+}

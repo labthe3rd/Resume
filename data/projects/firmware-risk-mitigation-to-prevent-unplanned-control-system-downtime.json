@@ -1,0 +1,17 @@
+{
+  "title": "Firmware Risk Mitigation to Prevent Unplanned Control System Downtime",
+  "company": "General Industrial Environment",
+  "category": "Reliability Engineering",
+  "icon": "Shield",
+  "color": "#00d4ff",
+  "problem": "Known controller firmware defects could intermittently disrupt controller-to-HMI communications, creating risk of unplanned production stops.",
+  "solution": "Analyzed firmware behavior, identified high-risk revisions, and defined a controlled migration and mitigation strategy to eliminate failure modes.",
+  "benefit": "Significantly reduced likelihood of unplanned downtime and stabilized critical control infrastructure.",
+  "monetaryValue": "300,000",
+  "monetaryWord": "Avoided Downtime",
+  "tags": [
+    "Controls",
+    "Firmware",
+    "Reliability"
+  ]
+}

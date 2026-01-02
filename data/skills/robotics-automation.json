@@ -1,0 +1,14 @@
+{
+  "title": "Robotics & Automation",
+  "icon": "Bot",
+  "color": "#ec4899",
+  "skills": [
+    "Fanuc Robots",
+    "Denso Robots",
+    "IAI Robots",
+    "PLC Integration",
+    "Robot Cell Networking",
+    "Safety Interlocks",
+    "Autonomous Systems"
+  ]
+}

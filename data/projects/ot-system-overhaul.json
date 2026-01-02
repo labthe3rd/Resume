@@ -1,0 +1,13 @@
+{
+  "title": "OT System Overhaul",
+  "company": "Kellanova",
+  "category": "Kellanova",
+  "icon": "Castle",
+  "color": "#a855f7",
+  "problem": "Several systems for data collection were not functioning upon starting my role. No documentation existed.",
+  "solution": "Restored functionality for OPC communication on several servers, created disaster recovery program, engineered solution to track PLC changes, developed automated backup system and created documentation.",
+  "benefit": "Plant wide productivity improvements, reduced maintenance time, and restored metrics that were no longer being tracked.",
+  "monetaryValue": "150,000",
+  "monetaryWord": "Savings",
+  "tags": ["OPC", "Disaster Recovery", "Documentation", "Automation"]
+}
