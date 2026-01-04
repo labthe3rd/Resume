@@ -3,9 +3,12 @@
 import { motion } from 'framer-motion'
 import { useInView } from 'framer-motion'
 import { useRef, useState, useEffect } from 'react'
-import { RotateCcw, Brain, Zap, AlertTriangle, Send, RefreshCw, Thermometer, Flame } from 'lucide-react'
+import { 
+  RotateCcw, Brain, Zap, AlertTriangle, Send, Thermometer, Flame,
+  Database, Eye, EyeOff
+} from 'lucide-react'
 import { useWebSocket } from '../contexts/WebSocketContext'
-import HeaterPowerGraph from './HeaterPowerGraph';
+import DataHistorian from './DataHistorian'
 
 export default function ControlSystem({ fullPage = false }) {
   const ref = useRef(null)
@@ -35,7 +38,21 @@ export default function ControlSystem({ fullPage = false }) {
       tags: ['startup']
     }
   })
-  const [history, setHistory] = useState({ temp: [], sp: [] })
+  
+  // Multi-tag history for unified graph
+  const [history, setHistory] = useState({
+    temperature: [],
+    setpoint: [],
+    heaterPower: []
+  })
+  
+  // Visible tags state
+  const [visibleTags, setVisibleTags] = useState({
+    temperature: true,
+    setpoint: true,
+    heaterPower: true
+  })
+  
   const [chatMessages, setChatMessages] = useState([
     { type: 'system', text: 'Tell the AI what setpoint to target, e.g. "stabilize at 75"' }
   ])
@@ -43,11 +60,12 @@ export default function ControlSystem({ fullPage = false }) {
   const [isLoading, setIsLoading] = useState(false)
   const [aiDecisions, setAiDecisions] = useState([])
   const [expandedChat, setExpandedChat] = useState(new Set())
+  
+  const [showHistorian, setShowHistorian] = useState(false)
+  const [historianPaused, setHistorianPaused] = useState(false)
 
-  // Use shared WebSocket context
-  const { connected: wsConnected, controlData, subscribe } = useWebSocket()
+  const { connected: wsConnected, controlData } = useWebSocket()
 
-  // Update connected state
   useEffect(() => {
     setConnected(wsConnected)
   }, [wsConnected])
@@ -59,11 +77,11 @@ export default function ControlSystem({ fullPage = false }) {
     setSystemState(controlData)
 
     setHistory(prev => {
-      const newTemp = [...prev.temp, controlData.temperature]
-      const newSp = [...prev.sp, controlData.setpoint]
-      if (newTemp.length > 300) newTemp.shift()
-      if (newSp.length > 300) newSp.shift()
-      return { temp: newTemp, sp: newSp }
+      const newHistory = { ...prev }
+      newHistory.temperature = [...prev.temperature, controlData.temperature].slice(-300)
+      newHistory.setpoint = [...prev.setpoint, controlData.setpoint].slice(-300)
+      newHistory.heaterPower = [...prev.heaterPower, controlData.heaterPower].slice(-300)
+      return newHistory
     })
 
     // Track AI decisions
@@ -74,18 +92,11 @@ export default function ControlSystem({ fullPage = false }) {
       const kd = controlData.agent.kd ?? 0
       const currentPid = `${kp.toFixed(3)}-${ki.toFixed(4)}-${kd.toFixed(3)}`
 
-      // Check if PID actually changed
       const pidChanged = lastPidRef.current !== null && lastPidRef.current !== currentPid
-
-      // Get action info
       const action = controlData.agent.lastAction
       const actionKey = action ? `${action.action}-${(action.analysis || '').substring(0, 30)}` : null
       const actionChanged = actionKey && actionKey !== lastActionKeyRef.current
-
-      // Time-based logging (every 15s even if nothing changed)
       const timeSinceLast = now - lastLogTimeRef.current
-
-      // Decide whether to log
       const shouldLog = pidChanged || actionChanged || timeSinceLast > 15000
 
       if (shouldLog && (pidChanged || action)) {
@@ -112,16 +123,14 @@ export default function ControlSystem({ fullPage = false }) {
         })
       }
 
-      // Initialize lastPid on first message
       if (lastPidRef.current === null) {
         lastPidRef.current = currentPid
       }
     }
   }, [controlData])
 
-  // Auto-scroll chat only after user sends a message (not on mount or WS updates)
+  // Auto-scroll chat
   useEffect(() => {
-    // Only auto-scroll if user has sent a message
     if (!userHasInteractedRef.current) return
     
     const scroller = chatScrollRef.current
@@ -132,13 +141,12 @@ export default function ControlSystem({ fullPage = false }) {
     }
   }, [chatMessages, isLoading])
 
-  // Draw chart with HiDPI support
+  // Draw unified multi-tag chart
   useEffect(() => {
     const canvas = canvasRef.current
     if (!canvas) return
     const ctx = canvas.getContext('2d')
 
-    // HiDPI scaling
     const dpr = window.devicePixelRatio || 1
     const rect = canvas.getBoundingClientRect()
     canvas.width = rect.width * dpr
@@ -147,54 +155,96 @@ export default function ControlSystem({ fullPage = false }) {
 
     const width = rect.width
     const height = rect.height
-    const leftMargin = 50
-    const plotWidth = width - leftMargin - 10
-
-    // Temperature range: 0-450°C with nice labels
-    const minTemp = 0
-    const maxTemp = 450
-    const tempLabels = [0, 100, 200, 300, 400]
+    const leftMargin = 55
+    const rightMargin = 55
+    const plotWidth = width - leftMargin - rightMargin
 
     // Clear background
     ctx.fillStyle = '#0a0a0a'
     ctx.fillRect(0, 0, width, height)
 
-    // Draw grid and Y-axis labels
-    ctx.strokeStyle = 'rgba(255,255,255,0.12)'
-    ctx.lineWidth = 1
-    ctx.fillStyle = 'rgba(255,255,255,0.6)'
-    ctx.font = '11px monospace'
-    ctx.textAlign = 'right'
+    // Define metrics with their own scales
+    const metrics = [
+      { 
+        key: 'temperature', 
+        color: '#00d4ff', 
+        min: 0, 
+        max: 450,
+        label: 'Temp °C',
+        side: 'left'
+      },
+      { 
+        key: 'setpoint', 
+        color: '#fbbf24', 
+        min: 0, 
+        max: 450,
+        label: 'Setpoint °C',
+        side: 'left'
+      },
+      { 
+        key: 'heaterPower', 
+        color: '#ef4444', 
+        min: 0, 
+        max: 100,
+        label: 'Power %',
+        side: 'right'
+      }
+    ]
 
+    // Draw grid for temperature (left axis)
+    ctx.strokeStyle = 'rgba(255,255,255,0.08)'
+    ctx.lineWidth = 1
+    const tempLabels = [0, 100, 200, 300, 400]
+    
     tempLabels.forEach(temp => {
-      const y = height - ((temp - minTemp) / (maxTemp - minTemp)) * height
+      const y = height - ((temp - 0) / 450) * height
       ctx.beginPath()
       ctx.moveTo(leftMargin, y)
-      ctx.lineTo(width - 10, y)
+      ctx.lineTo(width - rightMargin, y)
       ctx.stroke()
-      ctx.fillText(`${temp}°C`, leftMargin - 8, y + 4)
     })
 
-    if (history.temp.length < 2) return
+    // Left Y-axis labels (Temperature)
+    ctx.fillStyle = 'rgba(255,255,255,0.6)'
+    ctx.font = '10px monospace'
+    ctx.textAlign = 'right'
+    tempLabels.forEach(temp => {
+      const y = height - ((temp - 0) / 450) * height
+      ctx.fillText(`${temp}°C`, leftMargin - 5, y + 3)
+    })
 
-    const drawLine = (data, color) => {
-      ctx.strokeStyle = color
+    // Right Y-axis labels (Power)
+    ctx.textAlign = 'left'
+    const powerLabels = [0, 25, 50, 75, 100]
+    powerLabels.forEach(power => {
+      const y = height - ((power - 0) / 100) * height
+      ctx.fillText(`${power}%`, width - rightMargin + 5, y + 3)
+    })
+
+    if (history.temperature.length < 2) return
+
+    // Draw each visible metric
+    metrics.forEach(metric => {
+      if (!visibleTags[metric.key]) return
+      
+      const data = history[metric.key]
+      if (!data || data.length < 2) return
+
+      ctx.strokeStyle = metric.color
       ctx.lineWidth = 2
       ctx.lineCap = 'round'
       ctx.lineJoin = 'round'
       ctx.beginPath()
+
       data.forEach((val, i) => {
         const x = leftMargin + (i / Math.max(data.length - 1, 1)) * plotWidth
-        const y = height - ((val - minTemp) / (maxTemp - minTemp)) * height
+        const y = height - ((val - metric.min) / (metric.max - metric.min)) * height
         if (i === 0) ctx.moveTo(x, y)
         else ctx.lineTo(x, y)
       })
       ctx.stroke()
-    }
-
-    drawLine(history.sp, '#fbbf24')
-    drawLine(history.temp, '#00d4ff')
-  }, [history])
+    })
+  }, [history, visibleTags])
 
   const getApiUrl = () => {
     const isLocal = typeof window !== 'undefined' && window.location.hostname === 'localhost'
@@ -219,56 +269,26 @@ export default function ControlSystem({ fullPage = false }) {
   const increaseInstability = () => apiCall('/user/instability', { amount: 0.15 })
   const resetSystem = () => {
     apiCall('/user/reset')
-    setHistory({ temp: [], sp: [] })
-    setChatMessages([{ type: 'system', text: 'System reset' }])
+    setChatMessages([{ type: 'system', text: 'System reset. Ready for new setpoint.' }])
     setAiDecisions([])
-    lastPidRef.current = null
-    lastActionKeyRef.current = null
   }
-  const resetPID = () => {
-    apiCall('/agent/reset-pid')
-    lastPidRef.current = null
-    setAiDecisions(prev => [{
-      id: Date.now(),
-      time: new Date().toLocaleTimeString(),
-      action: 'RESET',
-      analysis: 'PID reset to defaults - AI will re-tune',
-      pidChanged: true,
-      kp: 0.5, ki: 0.02, kd: 0.1
-    }, ...prev])
-  }
-  const toggleAgent = () => apiCall('/agent/toggle', { active: !systemState.agent?.active })
 
   const sendChat = async () => {
     if (!chatInput.trim() || isLoading) return
     
     userHasInteractedRef.current = true
     const message = chatInput.trim()
-    setChatInput('')
     setChatMessages(prev => [...prev, { type: 'user', text: message }])
+    setChatInput('')
     setIsLoading(true)
 
-    try {
-      await fetch(`${getApiUrl()}/agent/instruct`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ instruction: message })
-      })
-      
-      const res = await fetch(`${getApiUrl()}/control/chat`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ message })
-      })
-      const data = await res.json()
-      
-      if (data.response) {
-        setChatMessages(prev => [...prev, { type: 'ai', text: data.response }])
-      } else if (data.error) {
-        setChatMessages(prev => [...prev, { type: 'system', text: `Error: ${data.hint || data.error}` }])
-      }
-    } catch (e) {
-      setChatMessages(prev => [...prev, { type: 'system', text: 'Error communicating with AI' }])
+    const data = await apiCall('/control/chat', { message });
+    console.log(data)
+    
+    if (data?.response) {
+      setChatMessages(prev => [...prev, { type: 'ai', text: data.response }])
+    } else {
+      setChatMessages(prev => [...prev, { type: 'system', text: 'No response from AI' }])
     }
     
     setIsLoading(false)
@@ -276,219 +296,194 @@ export default function ControlSystem({ fullPage = false }) {
 
   const toggleChatExpand = (index) => {
     setExpandedChat(prev => {
-      const next = new Set(prev)
-      if (next.has(index)) next.delete(index)
-      else next.add(index)
-      return next
+      const newSet = new Set(prev)
+      if (newSet.has(index)) newSet.delete(index)
+      else newSet.add(index)
+      return newSet
     })
   }
 
-  const getStatusColor = () => {
-    switch (systemState.stability) {
-      case 'STABLE': return '#10b981'
-      case 'MARGINAL': return '#fbbf24'
-      case 'UNSTABLE': return '#f97316'
-      case 'CRITICAL': return '#ef4444'
-      default: return '#888'
-    }
+  const toggleTag = (tag) => {
+    setVisibleTags(prev => ({ ...prev, [tag]: !prev[tag] }))
   }
 
   return (
     <section
-      id="control-system"
       ref={ref}
+      id="control-system"
       style={{
-        padding: fullPage ? '1rem' : '8rem 2rem',
         minHeight: fullPage ? '100vh' : 'auto',
+        padding: fullPage ? '6rem 2rem' : '4rem 2rem',
+        background: 'linear-gradient(180deg, #05050800 0%, #0a0a0f00 100%)',
         position: 'relative'
       }}
     >
-      <div className={fullPage ? '' : 'container'}>
-        {!fullPage && (
-          <motion.div
-            initial={{ opacity: 0, y: 40 }}
-            animate={isInView ? { opacity: 1, y: 0 } : {}}
-            transition={{ duration: 0.8 }}
-            style={{ marginBottom: '3rem' }}
-          >
-            <span className="section-subtitle">Live Demo</span>
-            <h2 className="section-title">
-              AI <span className="gradient-text">Control System</span>
-            </h2>
-            <p style={{ color: 'var(--text-secondary)', maxWidth: '600px' }}>
-              Watch an AI agent tune PID parameters in real-time to stabilize an unstable process.
-            </p>
-          </motion.div>
-        )}
-
-        {fullPage && (
-          <div style={{ marginBottom: '1rem' }}>
-            <a href="/" style={{ color: 'var(--accent-cyan)', textDecoration: 'none', fontSize: '0.9rem' }}>
-              ← Back to Portfolio
-            </a>
-            <h1 style={{ fontSize: '1.5rem', marginTop: '0.5rem' }}>AI Control System Demo</h1>
-          </div>
-        )}
-
+      <div style={{ maxWidth: 900, margin: '0 auto' }}>
         <motion.div
-          initial={fullPage ? false : { opacity: 0, y: 20 }}
-          animate={isInView || fullPage ? { opacity: 1, y: 0 } : {}}
-          transition={{ duration: 0.3 }}
-          className="glass-card"
-          style={{ padding: '1.5rem', maxWidth: fullPage ? '100%' : 1400, margin: '0 auto' }}
+          initial={{ opacity: 0, y: 20 }}
+          animate={isInView ? { opacity: 1, y: 0 } : {}}
+          transition={{ duration: 0.8 }}
+          style={{ textAlign: 'center', marginBottom: '2rem' }}
         >
-          {/* Header */}
-          <div style={{
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'space-between',
-            marginBottom: '1rem',
-            flexWrap: 'wrap',
-            gap: '1rem'
+          <h2 className="gradient-text" style={{
+            fontSize: 'clamp(2rem, 5vw, 3rem)',
+            fontFamily: 'Syne, sans-serif',
+            fontWeight: 800,
+            marginBottom: '1rem'
           }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
-              <div style={{
-                width: 10,
-                height: 10,
-                borderRadius: '50%',
-                background: connected ? '#10b981' : '#ef4444',
-                boxShadow: `0 0 15px ${connected ? '#10b981' : '#ef4444'}`,
-                animation: connected ? 'pulse 2s infinite' : 'none'
-              }} />
-              <span className="mono" style={{ color: connected ? '#10b981' : '#ef4444', fontWeight: 600, fontSize: '0.8rem' }}>
-                {connected ? 'LIVE' : 'OFFLINE'}
-              </span>
-              <span className="mono" style={{ 
-                padding: '0.2rem 0.6rem',
-                borderRadius: '12px',
-                fontSize: '0.7rem',
-                fontWeight: 'bold',
-                background: getStatusColor() + '20',
-                color: getStatusColor()
-              }}>
-                {systemState.stability}
-              </span>
-            </div>
-          </div>
+            AI PID Control System
+          </h2>
+          <p style={{
+            fontSize: 'clamp(0.9rem, 2vw, 1.1rem)',
+            color: 'var(--text-secondary)',
+            maxWidth: 700,
+            margin: '0 auto'
+          }}>
+            Real-time AI-powered thermal control with adaptive PID tuning
+          </p>
+        </motion.div>
 
-          {/* Main Layout */}
+        {/* Connection Status */}
+        <div style={{
+          textAlign: 'center',
+          marginBottom: '1rem',
+          fontSize: '0.8rem',
+          color: connected ? '#10b981' : '#ef4444'
+        }}>
+          {connected ? '● CONNECTED' : '● DISCONNECTED'}
+        </div>
+
+        {/* Main Control Panel - REDUCED WIDTH */}
+        <motion.div
+          initial={{ opacity: 0, scale: 0.95 }}
+          animate={isInView ? { opacity: 1, scale: 1 } : {}}
+          transition={{ duration: 0.8, delay: 0.2 }}
+          style={{
+            background: 'rgba(0,0,0,0.4)',
+            border: '1px solid rgba(255,255,255,0.1)',
+            borderRadius: '16px',
+            padding: '1.5rem',
+            maxWidth: 800,  // REDUCED from full width
+            margin: '0 auto'
+          }}
+        >
+          {/* System Metrics */}
           <div style={{
             display: 'grid',
-            gridTemplateColumns: '1fr 280px 240px',
-            gap: '1rem',
-            alignItems: 'start'
+            gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))',
+            gap: '0.75rem',
+            marginBottom: '1rem'
           }}>
-            {/* LEFT COLUMN */}
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
-              {/* Chart */}
-              <div style={{ background: 'rgba(0,0,0,0.3)', borderRadius: '10px', padding: '0.75rem' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.5rem' }}>
-                  <span className="mono" style={{ color: 'var(--text-tertiary)', fontSize: '0.65rem' }}>TEMPERATURE TREND (0-450°C)</span>
-                  <div style={{ display: 'flex', gap: '0.75rem', fontSize: '0.65rem' }}>
-                    <span style={{ color: '#00d4ff' }}>● Temp</span>
-                    <span style={{ color: '#fbbf24' }}>● Setpoint</span>
-                  </div>
-                </div>
-                <canvas ref={canvasRef} style={{ width: '100%', height: '160px', display: 'block', borderRadius: '6px' }} />
-              </div>
+            <GaugeCard label="TEMPERATURE" value={systemState.temperature} color="#00d4ff" max={450} unit="°C" />
+            <GaugeCard label="SETPOINT" value={systemState.setpoint} color="#fbbf24" max={450} unit="°C" />
+            <GaugeCard label="HEATER POWER" value={systemState.heaterPower} color="#ef4444" max={100} unit="%" />
+            <GaugeCard label="ERROR" value={systemState.error} color="#8b5cf6" max={100} unit="°C" />
+          </div>
 
-              {/* Gauges */}
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '0.5rem' }}>
-                <GaugeCard label="Temperature" value={systemState.temperature} color="#00d4ff" max={450} unit="°C" />
-                <GaugeCard label="Setpoint" value={systemState.setpoint} color="#fbbf24" max={450} unit="°C" />
-                <GaugeCard label="Error" value={systemState.error} color="#ef4444" max={50} />
-              </div>
-
-              {/* Controls Row */}
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.5rem' }}>
-                <div style={{ background: 'rgba(0,0,0,0.3)', borderRadius: '10px', padding: '0.75rem' }}>
-                  <div className="mono" style={{ color: 'var(--text-tertiary)', fontSize: '0.6rem', marginBottom: '0.5rem' }}>CHAOS CONTROLS</div>
-                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.35rem' }}>
-                    <MiniButton onClick={() => addDisturbance(20)} color="#f97316"><Zap size={10} /> Kick</MiniButton>
-                    <MiniButton onClick={() => addDisturbance(50)} color="#ef4444"><AlertTriangle size={10} /> Big</MiniButton>
-                    <MiniButton onClick={increaseInstability} color="#a855f7">Unstable</MiniButton>
-                    <MiniButton onClick={resetSystem} color="#6b7280"><RotateCcw size={10} /> Reset</MiniButton>
-                  </div>
-                </div>
-
-                <div style={{ background: 'rgba(0,0,0,0.3)', borderRadius: '10px', padding: '0.75rem' }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.4rem' }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
-                      <Brain size={14} style={{ color: '#a855f7' }} />
-                      <span className="mono" style={{ color: 'var(--text-tertiary)', fontSize: '0.6rem' }}>AI AGENT</span>
-                    </div>
-                    <motion.button
-                      onClick={toggleAgent}
-                      whileTap={{ scale: 0.95 }}
-                      style={{
-                        padding: '0.2rem 0.5rem',
-                        border: 'none',
-                        borderRadius: '10px',
-                        fontSize: '0.55rem',
-                        fontWeight: 'bold',
-                        cursor: 'pointer',
-                        background: systemState.agent?.active ? '#10b98130' : '#ef444430',
-                        color: systemState.agent?.active ? '#10b981' : '#ef4444'
-                      }}
-                    >
-                      {systemState.agent?.active ? 'ON' : 'OFF'}
-                    </motion.button>
-                  </div>
-                  <div className="mono" style={{ fontSize: '0.55rem', color: '#a855f7', marginBottom: '0.3rem' }}>
-                    Kp={systemState.agent?.kp?.toFixed(2)} Ki={systemState.agent?.ki?.toFixed(3)} Kd={systemState.agent?.kd?.toFixed(2)}
-                  </div>
-                  <MiniButton onClick={resetPID} color="#fbbf24" style={{ width: '100%' }}>
-                    <RefreshCw size={10} /> Reset PID
-                  </MiniButton>
-                </div>
-              </div>
-
-              {/* Bottom Row */}
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.5rem' }}>
-                <div style={{ background: 'rgba(0,0,0,0.3)', borderRadius: '10px', padding: '0.75rem' }}>
-                  <div className="mono" style={{ color: 'var(--text-tertiary)', fontSize: '0.6rem', marginBottom: '0.4rem' }}>RELIABILITY</div>
-                  <RiskGauge 
-                    risk={systemState.agent?.hallucination?.risk || 0}
-                    level={systemState.agent?.hallucination?.riskLevel || 'NORMAL'}
-                  />
-                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.25rem', marginTop: '0.4rem', fontSize: '0.55rem' }}>
-                    <div><span style={{ color: 'var(--text-tertiary)' }}>Quality: </span><span style={{ color: '#10b981' }}>{systemState.agent?.hallucination?.recentQuality || 100}%</span></div>
-                    <div><span style={{ color: 'var(--text-tertiary)' }}>Failovers: </span><span style={{ color: '#fbbf24' }}>{systemState.supervisor?.failoverCount || 0}</span></div>
-                  </div>
-                </div>
-
-                <div style={{ background: 'rgba(0,0,0,0.3)', borderRadius: '10px', padding: '0.75rem', fontFamily: 'JetBrains Mono, monospace', fontSize: '0.55rem' }}>
-                  <div style={{ color: 'var(--text-tertiary)', marginBottom: '0.3rem' }}>// OPC-UA TAGS</div>
-                  <div style={{ color: '#00d4ff' }}>PV: {systemState.temperature?.toFixed(2)}</div>
-                  <div style={{ color: '#fbbf24' }}>SP: {systemState.setpoint}</div>
-                  <div style={{ color: '#10b981' }}>OUT: {systemState.heaterPower?.toFixed(2)}</div>
-                  <div style={{ color: '#ef4444' }}>ERR: {systemState.error?.toFixed(3)}</div>
-                </div>
-              </div>
+          {/* Unified Graph with Tag Toggles */}
+          <div style={{
+            background: 'rgba(0,0,0,0.6)',
+            borderRadius: '10px',
+            padding: '1rem',
+            marginBottom: '1rem'
+          }}>
+            {/* Tag Toggle Controls */}
+            <div style={{
+              display: 'flex',
+              gap: '0.75rem',
+              marginBottom: '0.75rem',
+              justifyContent: 'center',
+              flexWrap: 'wrap'
+            }}>
+              <TagToggle
+                label="Temperature"
+                color="#00d4ff"
+                active={visibleTags.temperature}
+                onClick={() => toggleTag('temperature')}
+              />
+              <TagToggle
+                label="Setpoint"
+                color="#fbbf24"
+                active={visibleTags.setpoint}
+                onClick={() => toggleTag('setpoint')}
+              />
+              <TagToggle
+                label="Heater Power"
+                color="#ef4444"
+                active={visibleTags.heaterPower}
+                onClick={() => toggleTag('heaterPower')}
+              />
             </div>
 
-            {/* MIDDLE COLUMN - Chat */}
+            {/* Canvas Graph - prevent scroll on click */}
+            <div style={{ 
+              position: 'relative',
+              pointerEvents: 'none'  // Prevents click events from bubbling
+            }}>
+              <canvas
+                ref={canvasRef}
+                style={{
+                  width: '100%',
+                  height: 200,
+                  borderRadius: '8px',
+                  display: 'block'
+                }}
+              />
+            </div>
+          </div>
+
+          {/* Control Buttons */}
+          <div style={{
+            display: 'flex',
+            gap: '0.5rem',
+            marginBottom: '1rem',
+            flexWrap: 'wrap',
+            justifyContent: 'center'
+          }}>
+            <MiniButton onClick={() => addDisturbance(-20)} color="#00d4ff">
+              <Thermometer size={14} /> -20°C
+            </MiniButton>
+            <MiniButton onClick={() => addDisturbance(20)} color="#ef4444">
+              <Flame size={14} /> +20°C
+            </MiniButton>
+            <MiniButton onClick={increaseInstability} color="#fbbf24">
+              <AlertTriangle size={14} /> Instability
+            </MiniButton>
+            <MiniButton onClick={resetSystem} color="#8b5cf6">
+              <RotateCcw size={14} /> Reset
+            </MiniButton>
+            <MiniButton onClick={() => setShowHistorian(true)} color="#10b981">
+              <Database size={14} /> Historian
+            </MiniButton>
+          </div>
+
+          {/* Chat and AI Log */}
+          <div style={{
+            display: 'grid',
+            gridTemplateColumns: '1fr 1fr',
+            gap: '1rem'
+          }}>
+            {/* AI Chat */}
             <div style={{
-              background: 'rgba(0,0,0,0.3)',
+              background: 'rgba(0,212,255,0.1)',
+              border: '1px solid rgba(0,212,255,0.3)',
               borderRadius: '10px',
               padding: '0.75rem',
               display: 'flex',
               flexDirection: 'column',
-              height: '420px'
+              height: '380px'
             }}>
-              <div className="mono" style={{ color: 'var(--text-tertiary)', fontSize: '0.65rem', marginBottom: '0.5rem' }}>
-                CHAT WITH AGENT
+              <div className="mono" style={{ color: '#00d4ff', fontSize: '0.65rem', marginBottom: '0.5rem' }}>
+                AI CHAT
               </div>
               <div ref={chatScrollRef} style={{
                 flex: 1,
                 overflowY: 'auto',
-                overflowX: 'hidden',
                 marginBottom: '0.5rem',
-                fontSize: '0.75rem'
+                fontSize: '0.65rem'
               }}>
                 {chatMessages.map((msg, i) => {
-                  const isAi = msg.type === 'ai'
-                  const isLong = isAi && (msg.text?.length || 0) > 360
+                  const isLong = msg.text.length > 360
                   const expanded = expandedChat.has(i)
                   const displayText = isLong && !expanded ? msg.text.substring(0, 360) + '...' : msg.text
 
@@ -564,7 +559,7 @@ export default function ControlSystem({ fullPage = false }) {
               </div>
             </div>
 
-            {/* RIGHT COLUMN - AI Decision Log */}
+            {/* AI Decision Log */}
             <div style={{
               background: 'rgba(139,92,246,0.1)',
               border: '1px solid rgba(139,92,246,0.3)',
@@ -572,7 +567,7 @@ export default function ControlSystem({ fullPage = false }) {
               padding: '0.75rem',
               display: 'flex',
               flexDirection: 'column',
-              height: '420px'
+              height: '380px'
             }}>
               <div className="mono" style={{ color: '#a855f7', fontSize: '0.65rem', marginBottom: '0.5rem' }}>
                 AI TUNING LOG
@@ -614,16 +609,42 @@ export default function ControlSystem({ fullPage = false }) {
             </div>
           </div>
         </motion.div>
-        <HeaterPowerGraph heaterPower={systemState?.heaterPower} />
       </div>
 
-      <style jsx>{`
-        @keyframes pulse {
-          0%, 100% { opacity: 1; }
-          50% { opacity: 0.5; }
-        }
-      `}</style>
+      {/* Data Historian Modal */}
+      <DataHistorian
+        isOpen={showHistorian}
+        onClose={() => setShowHistorian(false)}
+        systemState={systemState}
+        isPaused={historianPaused}
+      />
     </section>
+  )
+}
+
+function TagToggle({ label, color, active, onClick }) {
+  return (
+    <motion.button
+      onClick={onClick}
+      whileTap={{ scale: 0.95 }}
+      style={{
+        display: 'flex',
+        alignItems: 'center',
+        gap: '0.4rem',
+        padding: '0.4rem 0.75rem',
+        border: `1px solid ${active ? color : 'rgba(255,255,255,0.2)'}`,
+        borderRadius: '6px',
+        background: active ? `${color}20` : 'rgba(0,0,0,0.3)',
+        color: active ? color : 'rgba(255,255,255,0.5)',
+        fontSize: '0.7rem',
+        fontWeight: 500,
+        cursor: 'pointer',
+        transition: 'all 0.2s'
+      }}
+    >
+      {active ? <Eye size={14} /> : <EyeOff size={14} />}
+      {label}
+    </motion.button>
   )
 }
 
@@ -679,36 +700,5 @@ function MiniButton({ onClick, color, children, style = {} }) {
     >
       {children}
     </motion.button>
-  )
-}
-
-function RiskGauge({ risk, level }) {
-  const color = level === 'CRITICAL' ? '#ef4444' : level === 'WARNING' ? '#fbbf24' : '#10b981'
-  
-  return (
-    <div>
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.2rem' }}>
-        <span style={{ fontSize: '1rem', fontWeight: 'bold', color }}>{risk}%</span>
-        <span style={{ 
-          fontSize: '0.5rem', 
-          fontWeight: 'bold',
-          padding: '0.1rem 0.3rem',
-          borderRadius: '3px',
-          background: `${color}20`,
-          color
-        }}>
-          {level}
-        </span>
-      </div>
-      <div style={{ height: 4, background: 'rgba(255,255,255,0.1)', borderRadius: 2 }}>
-        <div style={{
-          height: '100%',
-          width: `${risk}%`,
-          background: color,
-          borderRadius: 2,
-          transition: 'width 0.3s'
-        }} />
-      </div>
-    </div>
   )
 }
