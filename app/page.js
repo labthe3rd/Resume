@@ -1,7 +1,7 @@
 // file: ./app/page.js  (main page)
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import dynamic from 'next/dynamic'
 import Navigation from '../components/Navigation'
@@ -28,7 +28,13 @@ export default function Home() {
   const [isLoading, setIsLoading] = useState(true)
   const [activeSection, setActiveSection] = useState('hero')
   const [showDebug, setShowDebug] = useState(false)
-  const [perfStats, setPerfStats] = useState(null)
+  const [perfStats, setPerfStats] = useState({
+    fps: 0,
+    capabilities: null,
+    currentTier: null,
+    quality: null,
+    lastChange: null
+  })
   const { subscribe } = useWebSocket()
 
   useEffect(() => {
@@ -66,7 +72,7 @@ export default function Home() {
     return () => window.removeEventListener('scroll', handleScroll)
   }, [])
 
-  useEffect(() => {
+ useEffect(() => {
     if (!isDevelopment) return
 
     const handleKeyPress = (e) => {
@@ -79,20 +85,20 @@ export default function Home() {
     return () => window.removeEventListener('keydown', handleKeyPress)
   }, [])
 
-  const handleStatsUpdate = (stats) => {
+  const handleStatsUpdate = useCallback((stats) => {
     setPerfStats(prev => {
       if (typeof stats === 'function') {
         return stats(prev)
       }
       return { ...prev, ...stats }
     })
-  }
+  }, [])
 
-  const handleSetTier = (tier) => {
+  const handleSetTier = useCallback((tier) => {
     if (window.__setScene3DTier) {
       window.__setScene3DTier(tier)
     }
-  }
+  }, [])
 
   return (
     <>
@@ -147,7 +153,7 @@ export default function Home() {
         )}
       </AnimatePresence>
 
-      <div className="canvas-container">
+  <div className="canvas-container">
         <Scene3D onStatsUpdate={isDevelopment ? handleStatsUpdate : undefined} />
       </div>
 

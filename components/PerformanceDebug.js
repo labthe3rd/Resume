@@ -9,7 +9,7 @@ export default function PerformanceDebug({ stats, onClose, onSetTier }) {
 
   useEffect(() => {
     if (stats?.lastChange) {
-      setHistory(prev => [...prev.slice(-9), stats.lastChange])
+      setHistory(prev => [...prev.slice(-9), { ...stats.lastChange, id: Date.now() }])
     }
   }, [stats?.lastChange])
 
@@ -268,9 +268,9 @@ export default function PerformanceDebug({ stats, onClose, onSetTier }) {
                 Change History
               </div>
               <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                {history.slice().reverse().map((change, i) => (
+                {history.slice().reverse().map((change) => (
                   <div 
-                    key={i}
+                    key={change.id}
                     style={{
                       padding: '8px',
                       background: 'rgba(255, 255, 255, 0.02)',

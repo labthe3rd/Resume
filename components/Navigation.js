@@ -1,3 +1,4 @@
+// file: ./components/Navigation.js
 'use client'
 
 import { useState, useEffect, useRef } from 'react'
@@ -8,12 +9,11 @@ import React from 'react'
 const navItems = [
   { id: 'about', label: 'About' },
   { id: 'skills', label: 'Skills' },
-+ { id: 'certifications', label: 'Certifications' },
+  { id: 'certifications', label: 'Certifications' },
   { id: 'experience', label: 'Experience' },
   { id: 'projects', label: 'Projects' },
   { id: 'contact', label: 'Contact' },
 ]
-
 
 const demoItems = [
   { id: 'architecture-map', label: 'System Architecture' },
@@ -101,10 +101,9 @@ export default function Navigation({ activeSection }) {
             alignItems: 'center',
             gap: '2rem'
           }} className="desktop-nav">
-            {navItems.map((item, index) => (
-               <React.Fragment key={item.id}>
+            {navItems.map((item) => (
+              <React.Fragment key={item.id}>
                 <motion.button
-                 
                   onClick={() => scrollToSection(item.id)}
                   whileHover={{ y: -2 }}
                   style={{
@@ -135,10 +134,10 @@ export default function Navigation({ activeSection }) {
                     />
                   )}
                 </motion.button>
-                
+
                 {/* Insert Demo dropdown after Projects */}
                 {item.id === 'projects' && (
-                  <div 
+                  <div
                     ref={demoRef}
                     style={{ position: 'relative' }}
                   >
@@ -161,12 +160,12 @@ export default function Navigation({ activeSection }) {
                       }}
                     >
                       Demo
-                      <ChevronDown 
-                        size={14} 
-                        style={{ 
+                      <ChevronDown
+                        size={14}
+                        style={{
                           transform: isDemoOpen ? 'rotate(180deg)' : 'rotate(0deg)',
                           transition: 'transform 0.2s ease'
-                        }} 
+                        }}
                       />
                       {demoItems.some(d => d.id === activeSection) && (
                         <motion.div
@@ -183,7 +182,7 @@ export default function Navigation({ activeSection }) {
                         />
                       )}
                     </motion.button>
-                    
+
                     <AnimatePresence>
                       {isDemoOpen && (
                         <motion.div
@@ -301,7 +300,6 @@ export default function Navigation({ activeSection }) {
             {navItems.map((item, index) => (
               <React.Fragment key={item.id}>
                 <motion.button
-                  key={item.id}
                   initial={{ opacity: 0, y: 20 }}
                   animate={{ opacity: 1, y: 0 }}
                   transition={{ delay: index * 0.1 }}
@@ -318,7 +316,7 @@ export default function Navigation({ activeSection }) {
                 >
                   {item.label}
                 </motion.button>
-                
+
                 {/* Insert Demo section after Projects */}
                 {item.id === 'projects' && (
                   <motion.div
