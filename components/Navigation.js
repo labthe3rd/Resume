@@ -8,10 +8,12 @@ import React from 'react'
 const navItems = [
   { id: 'about', label: 'About' },
   { id: 'skills', label: 'Skills' },
++ { id: 'certifications', label: 'Certifications' },
   { id: 'experience', label: 'Experience' },
   { id: 'projects', label: 'Projects' },
   { id: 'contact', label: 'Contact' },
 ]
+
 
 const demoItems = [
   { id: 'architecture-map', label: 'System Architecture' },

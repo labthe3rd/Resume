@@ -8,6 +8,7 @@ import Navigation from '../components/Navigation'
 import Hero from '../components/Hero'
 import About from '../components/About'
 import Skills from '../components/Skills'
+import Certificates from '../components/Certificates'
 import Experience from '../components/Experience'
 import Projects from '../components/Projects'
 import Contact from '../components/Contact'
@@ -16,16 +17,20 @@ import ControlSystem from '../components/ControlSystem'
 import LiquidTankMonitor from '../components/LiquidTankMonitor'
 import Chatbot from '../components/Chatbot'
 import SystemArchitectureMap from '../components/SystemArchitectureMap'
+import PerformanceDebug from '../components/PerformanceDebug'
 import { useWebSocket } from '../contexts/WebSocketContext'
 
 const Scene3D = dynamic(() => import('../components/Scene3D'), { ssr: false })
 
+const isDevelopment = process.env.NODE_ENV === 'development'
+
 export default function Home() {
   const [isLoading, setIsLoading] = useState(true)
   const [activeSection, setActiveSection] = useState('hero')
+  const [showDebug, setShowDebug] = useState(false)
+  const [perfStats, setPerfStats] = useState(null)
   const { subscribe } = useWebSocket()
 
-  // Main page needs BOTH streams
   useEffect(() => {
     const unsubControl = subscribe('control', () => {})
     const unsubTank = subscribe('tank', () => {})
@@ -42,7 +47,7 @@ export default function Home() {
 
   useEffect(() => {
     const handleScroll = () => {
-      const sections = ['hero', 'about', 'skills', 'experience', 'projects', 'tank-monitor', 'control-system', 'contact']
+      const sections = ['hero', 'about', 'skills', 'certifications', 'experience', 'projects', 'tank-monitor', 'control-system', 'contact']
       const scrollPosition = window.scrollY + window.innerHeight / 3
 
       for (const section of sections) {
@@ -60,6 +65,34 @@ export default function Home() {
     window.addEventListener('scroll', handleScroll)
     return () => window.removeEventListener('scroll', handleScroll)
   }, [])
+
+  useEffect(() => {
+    if (!isDevelopment) return
+
+    const handleKeyPress = (e) => {
+      if (e.ctrlKey && e.shiftKey && e.key === 'D') {
+        setShowDebug(prev => !prev)
+      }
+    }
+
+    window.addEventListener('keydown', handleKeyPress)
+    return () => window.removeEventListener('keydown', handleKeyPress)
+  }, [])
+
+  const handleStatsUpdate = (stats) => {
+    setPerfStats(prev => {
+      if (typeof stats === 'function') {
+        return stats(prev)
+      }
+      return { ...prev, ...stats }
+    })
+  }
+
+  const handleSetTier = (tier) => {
+    if (window.__setScene3DTier) {
+      window.__setScene3DTier(tier)
+    }
+  }
 
   return (
     <>
@@ -115,8 +148,46 @@ export default function Home() {
       </AnimatePresence>
 
       <div className="canvas-container">
-        <Scene3D />
+        <Scene3D onStatsUpdate={isDevelopment ? handleStatsUpdate : undefined} />
       </div>
+
+      {isDevelopment && showDebug && (
+        <PerformanceDebug 
+          stats={perfStats}
+          onClose={() => setShowDebug(false)}
+          onSetTier={handleSetTier}
+        />
+      )}
+
+      {isDevelopment && (
+        <div
+          onClick={() => setShowDebug(prev => !prev)}
+          style={{
+            position: 'fixed',
+            bottom: '20px',
+            left: '20px',
+            width: '50px',
+            height: '50px',
+            background: 'rgba(0, 212, 255, 0.1)',
+            backdropFilter: 'blur(10px)',
+            border: '1px solid rgba(0, 212, 255, 0.3)',
+            borderRadius: '50%',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            cursor: 'pointer',
+            zIndex: 9998,
+            transition: 'all 0.3s ease',
+            fontFamily: 'JetBrains Mono, monospace',
+            fontSize: '12px',
+            fontWeight: 700,
+            color: '#00d4ff'
+          }}
+          title="Toggle Performance Debug (Ctrl+Shift+D)"
+        >
+          FPS
+        </div>
+      )}
 
       <Navigation activeSection={activeSection} />
 
@@ -124,6 +195,7 @@ export default function Home() {
         <Hero />
         <About />
         <Skills />
+         <Certificates />
         <Experience />
         <Projects />
         <SystemArchitectureMap />

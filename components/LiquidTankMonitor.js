@@ -410,7 +410,7 @@ const [signalwireStatus, setSignalwireStatus] = useState({
               }
             }
             ttsMessage += ' Supervisor notification initiated.'
-            speak(tttsMessage)
+            speak(ttsMessage)
           }
         }
 
