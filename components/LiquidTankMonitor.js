@@ -73,6 +73,31 @@ export default function LiquidTankMonitor({ fullPage = false }) {
   const [aiAnalysis, setAiAnalysis] = useState(null)
   const [hallucination, setHallucination] = useState(null)
   const [supervisorStatus, setSupervisorStatus] = useState(null)
+  
+  const [notificationSettings, setNotificationSettings] = useState({
+  phoneNumber: '',
+  ttsEnabled: false,
+  smsEnabled: false,
+  callsEnabled: false,
+  registered: false,
+  termsAccepted: false
+})
+const [signalwireStatus, setSignalwireStatus] = useState({
+  enabled: false,
+  registeredPhones: []
+})
+  const toggleVolume = () => {
+    const newValue = !volumeEnabled
+    setVolumeEnabled(newValue)
+    // Sync with notification settings
+    if (notificationSettings.registered) {
+      setNotificationSettings(prev => ({
+        ...prev,
+        ttsEnabled: newValue
+      }))
+    }
+  }
+  
   const triggeredLevelsRef = useRef(new Set())
 
   const volumeEnabledRef = useRef(false)
@@ -136,51 +161,6 @@ export default function LiquidTankMonitor({ fullPage = false }) {
       synthRef.current.onvoiceschanged = loadVoices
     }
   }, [])
-
-  // Text-to-speech function with better voice
-  // const speak = useCallback((text) => {
-  //   console.log('speak() called, volumeEnabled:', volumeEnabled, 'synthRef:', !!synthRef.current)
-    
-  //   if (!synthRef.current) {
-  //     console.warn('TTS: speechSynthesis not available')
-  //     return
-  //   }
-    
-  //   if (!volumeEnabled) {
-  //     console.log('TTS: volume disabled, skipping')
-  //     return
-  //   }
-    
-  //   // Cancel any ongoing speech first
-  //   synthRef.current.cancel()
-    
-  //   // Small delay to ensure cancel completes
-  //   setTimeout(() => {
-  //     const utterance = new SpeechSynthesisUtterance(text)
-  //     utterance.rate = 0.95
-  //     utterance.pitch = 1.0
-  //     utterance.volume = volume
-      
-  //     if (selectedVoice) {
-  //       utterance.voice = selectedVoice
-  //     }
-      
-  //     utterance.onend = () => {
-  //       console.log('TTS finished speaking')
-  //     }
-  //     utterance.onerror = (e) => {
-  //       console.error('TTS error:', e.error)
-  //     }
-      
-  //     // Chrome workaround: resume if paused
-  //     if (synthRef.current.paused) {
-  //       synthRef.current.resume()
-  //     }
-      
-  //     console.log('TTS speaking:', text.substring(0, 80) + '...')
-  //     synthRef.current.speak(utterance)
-  //   }, 150)
-  // }, [volumeEnabled, volume, selectedVoice])
 
   const speak = useCallback((text) => {
   const enabled = volumeEnabledRef.current
@@ -251,6 +231,21 @@ export default function LiquidTankMonitor({ fullPage = false }) {
     }
   }, [wsConnected])
 
+ // Fetch SignalWire status on mount
+  useEffect(() => {
+    const fetchSignalWireStatus = async () => {
+      try {
+        const res = await fetch(`${getApiUrl()}/signalwire/status`)
+        if (res.ok) {
+          const data = await res.json()
+          setSignalwireStatus(data)
+        }
+      } catch (e) {
+        console.error('Failed to fetch SignalWire status:', e)
+      }
+    }
+    fetchSignalWireStatus()
+  }, [])
 
   // Handle tank data updates from context
   useEffect(() => {
@@ -442,6 +437,139 @@ export default function LiquidTankMonitor({ fullPage = false }) {
       })
     }
   }, [alarmState.alarmDisabled, speak])
+
+    const handlePhoneNumberChange = (e) => {
+    setNotificationSettings(prev => ({
+      ...prev,
+      phoneNumber: e.target.value
+    }))
+  }
+
+  const handleTermsChange = (e) => {
+    setNotificationSettings(prev => ({
+      ...prev,
+      termsAccepted: e.target.checked
+    }))
+  }
+
+  const handleTTSEnabledChange = (e) => {
+    setNotificationSettings(prev => ({
+      ...prev,
+      ttsEnabled: e.target.checked
+    }))
+  }
+
+  const handleSMSEnabledChange = (e) => {
+    setNotificationSettings(prev => ({
+      ...prev,
+      smsEnabled: e.target.checked
+    }))
+  }
+
+  const handleCallsEnabledChange = (e) => {
+    setNotificationSettings(prev => ({
+      ...prev,
+      callsEnabled: e.target.checked
+    }))
+  }
+
+  const handleRegisterPhone = async () => {
+    if (!notificationSettings.termsAccepted) {
+      setChatMessages(prev => [...prev, { 
+        type: 'alert', 
+        text: 'Please accept the terms and conditions to register your phone number.' 
+      }])
+      return
+    }
+
+    if (!notificationSettings.phoneNumber) {
+      setChatMessages(prev => [...prev, { 
+        type: 'alert', 
+        text: 'Please enter a phone number in E.164 format (+1234567890).' 
+      }])
+      return
+    }
+
+    try {
+      const res = await apiCall('/signalwire/register', {
+        phoneNumber: notificationSettings.phoneNumber,
+        ttsEnabled: notificationSettings.ttsEnabled,
+        smsEnabled: notificationSettings.smsEnabled,
+        callsEnabled: notificationSettings.callsEnabled
+      })
+
+      if (res && res.success) {
+        setNotificationSettings(prev => ({
+          ...prev,
+          registered: true
+        }))
+        setChatMessages(prev => [...prev, { 
+          type: 'system', 
+          text: `Phone number ${res.phoneNumber} registered for notifications.` 
+        }])
+        
+        // Refresh status
+        const statusRes = await fetch(`${getApiUrl()}/signalwire/status`)
+        if (statusRes.ok) {
+          const data = await statusRes.json()
+          setSignalwireStatus(data)
+        }
+      } else {
+        setChatMessages(prev => [...prev, { 
+          type: 'alert', 
+          text: `Registration failed: ${res?.error || 'Unknown error'}` 
+        }])
+      }
+    } catch (e) {
+      console.error('Phone registration error:', e)
+      setChatMessages(prev => [...prev, { 
+        type: 'alert', 
+        text: 'Failed to register phone number. Please check your connection.' 
+      }])
+    }
+  }
+
+  const handleUnregisterPhone = async () => {
+    try {
+      const res = await apiCall('/signalwire/unregister', {
+        phoneNumber: notificationSettings.phoneNumber
+      })
+
+      if (res && res.success) {
+        setNotificationSettings({
+          phoneNumber: '',
+          ttsEnabled: false,
+          smsEnabled: false,
+          callsEnabled: false,
+          registered: false,
+          termsAccepted: false
+        })
+        setChatMessages(prev => [...prev, { 
+          type: 'system', 
+          text: 'Phone number unregistered successfully.' 
+        }])
+        
+        // Refresh status
+        const statusRes = await fetch(`${getApiUrl()}/signalwire/status`)
+        if (statusRes.ok) {
+          const data = await statusRes.json()
+          setSignalwireStatus(data)
+        }
+      } else {
+        setChatMessages(prev => [...prev, { 
+          type: 'alert', 
+          text: `Unregistration failed: ${res?.error || 'Unknown error'}` 
+        }])
+      }
+    } catch (e) {
+      console.error('Phone unregistration error:', e)
+      setChatMessages(prev => [...prev, { 
+        type: 'alert', 
+        text: 'Failed to unregister phone number. Please check your connection.' 
+      }])
+    }
+  }
+
 
    // Fault injection handlers
   const toggleHighSensorDisabled = () => {
@@ -914,6 +1042,214 @@ export default function LiquidTankMonitor({ fullPage = false }) {
                   disabled={alarmState.alarmDisabled}
                 />
               </div>
+                        {/* Notification Settings Panel - SignalWire */}
+          {signalwireStatus.signalwireEnabled && (
+            <div style={{
+              background: 'rgba(59,130,246,0.05)',
+              border: '1px solid rgba(59,130,246,0.2)',
+              borderRadius: '12px',
+              padding: '1rem'
+            }}>
+              <div className="mono" style={{ color: '#3b82f6', fontSize: '0.7rem', marginBottom: '1rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                <Phone size={14} />
+                NOTIFICATION SETTINGS (SignalWire)
+              </div>
+              
+              {!notificationSettings.registered ? (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+                  {/* Phone Number Input */}
+                  <div>
+                    <label style={{ fontSize: '0.65rem', color: '#888', display: 'block', marginBottom: '0.25rem' }}>
+                      Phone Number (E.164 format)
+                    </label>
+                    <input
+                      type="tel"
+                      value={notificationSettings.phoneNumber}
+                      onChange={handlePhoneNumberChange}
+                      placeholder="+12345678900"
+                      style={{
+                        width: '100%',
+                        padding: '0.5rem',
+                        background: 'rgba(0,0,0,0.2)',
+                        border: '1px solid rgba(59,130,246,0.3)',
+                        borderRadius: '6px',
+                        color: '#fff',
+                        fontSize: '0.75rem',
+                        fontFamily: 'monospace'
+                      }}
+                    />
+                  </div>
+
+                  {/* TTS Checkbox */}
+                  <div style={{ 
+                    display: 'flex', 
+                    alignItems: 'center', 
+                    gap: '0.5rem',
+                    padding: '0.5rem',
+                    background: 'rgba(0,0,0,0.2)',
+                    borderRadius: '6px'
+                  }}>
+                    <input
+                      type="checkbox"
+                      id="tts-enabled"
+                      checked={notificationSettings.ttsEnabled}
+                      onChange={handleTTSEnabledChange}
+                      style={{ cursor: 'pointer' }}
+                    />
+                    <label htmlFor="tts-enabled" style={{ fontSize: '0.65rem', color: '#fff', cursor: 'pointer', flex: 1 }}>
+                      Enable Text-to-Speech Alerts (Browser)
+                    </label>
+                  </div>
+
+                  {/* SMS Checkbox */}
+                  <div style={{ 
+                    display: 'flex', 
+                    alignItems: 'center', 
+                    gap: '0.5rem',
+                    padding: '0.5rem',
+                    background: 'rgba(0,0,0,0.2)',
+                    borderRadius: '6px'
+                  }}>
+                    <input
+                      type="checkbox"
+                      id="sms-enabled"
+                      checked={notificationSettings.smsEnabled}
+                      onChange={handleSMSEnabledChange}
+                      style={{ cursor: 'pointer' }}
+                    />
+                    <label htmlFor="sms-enabled" style={{ fontSize: '0.65rem', color: '#fff', cursor: 'pointer', flex: 1 }}>
+                      Enable SMS Notifications (Level 2)
+                    </label>
+                  </div>
+
+                  {/* Calls Checkbox */}
+                  <div style={{ 
+                    display: 'flex', 
+                    alignItems: 'center', 
+                    gap: '0.5rem',
+                    padding: '0.5rem',
+                    background: 'rgba(0,0,0,0.2)',
+                    borderRadius: '6px'
+                  }}>
+                    <input
+                      type="checkbox"
+                      id="calls-enabled"
+                      checked={notificationSettings.callsEnabled}
+                      onChange={handleCallsEnabledChange}
+                      style={{ cursor: 'pointer' }}
+                    />
+                    <label htmlFor="calls-enabled" style={{ fontSize: '0.65rem', color: '#fff', cursor: 'pointer', flex: 1 }}>
+                      Enable Phone Calls (Level 3)
+                    </label>
+                  </div>
+
+                  {/* Terms Checkbox */}
+                  <div style={{ 
+                    display: 'flex', 
+                    alignItems: 'flex-start', 
+                    gap: '0.5rem',
+                    padding: '0.5rem',
+                    background: 'rgba(239,68,68,0.1)',
+                    border: '1px dashed rgba(239,68,68,0.3)',
+                    borderRadius: '6px'
+                  }}>
+                    <input
+                      type="checkbox"
+                      id="terms-accepted"
+                      checked={notificationSettings.termsAccepted}
+                      onChange={handleTermsChange}
+                      style={{ cursor: 'pointer', marginTop: '0.15rem' }}
+                    />
+                    <label htmlFor="terms-accepted" style={{ fontSize: '0.6rem', color: '#fbbf24', cursor: 'pointer', flex: 1, lineHeight: '1.3' }}>
+                      I agree to receive SMS and/or phone call notifications for this simulation. Standard messaging and data rates may apply.
+                    </label>
+                  </div>
+
+                  {/* Register Button */}
+                  <motion.button
+                    onClick={handleRegisterPhone}
+                    whileTap={{ scale: 0.98 }}
+                    disabled={!notificationSettings.termsAccepted || !notificationSettings.phoneNumber}
+                    style={{
+                      padding: '0.6rem',
+                      background: (notificationSettings.termsAccepted && notificationSettings.phoneNumber) ? 
+                        'linear-gradient(135deg, #3b82f6, #2563eb)' : '#374151',
+                      border: 'none',
+                      borderRadius: '6px',
+                      color: '#fff',
+                      fontWeight: 'bold',
+                      fontSize: '0.7rem',
+                      cursor: (notificationSettings.termsAccepted && notificationSettings.phoneNumber) ? 
+                        'pointer' : 'not-allowed',
+                      opacity: (notificationSettings.termsAccepted && notificationSettings.phoneNumber) ? 1 : 0.5
+                    }}
+                  >
+                    Register Phone Number
+                  </motion.button>
+
+                  {/* Status Info */}
+                  {signalwireStatus.registeredPhones && signalwireStatus.registeredPhones.length > 0 && (
+                    <div style={{
+                      marginTop: '0.5rem',
+                      padding: '0.5rem',
+                      background: 'rgba(16,185,129,0.1)',
+                      border: '1px solid rgba(16,185,129,0.3)',
+                      borderRadius: '6px',
+                      fontSize: '0.6rem',
+                      color: '#10b981'
+                    }}>
+                      <div style={{ fontWeight: 'bold', marginBottom: '0.25rem' }}>
+                        Registered Phones: {signalwireStatus.registeredPhones.length}
+                      </div>
+                      {signalwireStatus.registeredPhones.map((p, i) => (
+                        <div key={i} style={{ color: '#888' }}>
+                          {p.phone} - SMS: {p.smsEnabled ? 'Yes' : 'No'}, Calls: {p.callsEnabled ? 'Yes' : 'No'}
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              ) : (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+                  <div style={{
+                    padding: '0.75rem',
+                    background: 'rgba(16,185,129,0.1)',
+                    border: '1px solid rgba(16,185,129,0.3)',
+                    borderRadius: '6px'
+                  }}>
+                    <div style={{ color: '#10b981', fontWeight: 'bold', fontSize: '0.7rem', marginBottom: '0.5rem' }}>
+                      ✓ Phone Registered
+                    </div>
+                    <div style={{ fontSize: '0.65rem', color: '#888' }}>
+                      {notificationSettings.phoneNumber}
+                    </div>
+                    <div style={{ fontSize: '0.6rem', color: '#666', marginTop: '0.5rem' }}>
+                      • TTS: {notificationSettings.ttsEnabled ? 'Enabled' : 'Disabled'}<br/>
+                      • SMS (Level 2): {notificationSettings.smsEnabled ? 'Enabled' : 'Disabled'}<br/>
+                      • Calls (Level 3): {notificationSettings.callsEnabled ? 'Enabled' : 'Disabled'}
+                    </div>
+                  </div>
+
+                  <motion.button
+                    onClick={handleUnregisterPhone}
+                    whileTap={{ scale: 0.98 }}
+                    style={{
+                      padding: '0.6rem',
+                      background: 'rgba(239,68,68,0.2)',
+                      border: '1px solid rgba(239,68,68,0.3)',
+                      borderRadius: '6px',
+                      color: '#ef4444',
+                      fontWeight: 'bold',
+                      fontSize: '0.7rem',
+                      cursor: 'pointer'
+                    }}
+                  >
+                    Unregister Phone
+                  </motion.button>
+                </div>
+              )}
+            </div>
+          )}
               
               {/* Control buttons */}
               <div style={{ 
@@ -956,7 +1292,7 @@ export default function LiquidTankMonitor({ fullPage = false }) {
                 
                 {/* Enable/Disable Toggle */}
                 <button
-                  onClick={() => setVolumeEnabled(v => !v)}
+                  onClick={() => toggleVolume()}
                   style={{
                     width: '100%',
                     padding: '0.5rem',
