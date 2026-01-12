@@ -9,5 +9,21 @@
   "benefit": "Plant wide productivity improvements, reduced maintenance time, and restored metrics that were no longer being tracked.",
   "monetaryValue": "150,000",
   "monetaryWord": "Savings",
-  "tags": ["OPC", "Disaster Recovery", "Documentation", "Automation"]
+  "tags": [
+    "2025",
+    "OPC",
+    "Disaster Recovery",
+    "Documentation",
+    "Automation"
+  ],
+  "year": 2025,
+  "yearIsEstimate": true,
+  "emoji": "🧫",
+  "valueEstimate": {
+    "unit": "total",
+    "label": "Savings",
+    "usdLow": 150000,
+    "usdHigh": 150000,
+    "note": null
+  }
 }

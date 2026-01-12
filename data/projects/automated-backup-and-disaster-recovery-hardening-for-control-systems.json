@@ -10,8 +10,19 @@
   "monetaryValue": "100,000",
   "monetaryWord": "Risk Reduction",
   "tags": [
+    "2024",
     "Backup",
     "Resilience",
     "OT"
-  ]
+  ],
+  "year": 2024,
+  "yearIsEstimate": true,
+  "emoji": "🛡️",
+  "valueEstimate": {
+    "unit": "total",
+    "label": "Risk Reduction",
+    "usdLow": 100000,
+    "usdHigh": 100000,
+    "note": null
+  }
 }

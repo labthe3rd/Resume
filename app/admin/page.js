@@ -1,112 +1,10 @@
 'use client'
 
 import { useState, useRef, useEffect } from 'react'
-import { motion } from 'framer-motion'
-import { Upload, Trash2, Lock, Database, FileText, AlertCircle, CheckCircle, Loader2, Search, MessageSquare, File, Image, FileSpreadsheet, X, Terminal } from 'lucide-react'
+import { Upload, Trash2, Database, Loader2, Search, File, X } from 'lucide-react'
 
-// Matrix rain effect component
-function MatrixRain() {
-  const canvasRef = useRef(null)
-
-  useEffect(() => {
-    const canvas = canvasRef.current
-    if (!canvas) return
-
-    const ctx = canvas.getContext('2d')
-    canvas.width = window.innerWidth
-    canvas.height = window.innerHeight
-
-    const chars = 'アイウエオカキクケコサシスセソタチツテトナニヌネノハヒフヘホマミムメモヤユヨラリルレロワヲン0123456789ABCDEF'
-    const fontSize = 14
-    const columns = canvas.width / fontSize
-    const drops = Array(Math.floor(columns)).fill(1)
-
-    function draw() {
-      ctx.fillStyle = 'rgba(0, 0, 0, 0.05)'
-      ctx.fillRect(0, 0, canvas.width, canvas.height)
-
-      ctx.fillStyle = '#0f0'
-      ctx.font = `${fontSize}px monospace`
-
-      for (let i = 0; i < drops.length; i++) {
-        const text = chars[Math.floor(Math.random() * chars.length)]
-        ctx.fillStyle = `rgba(0, ${150 + Math.random() * 105}, 0, ${0.5 + Math.random() * 0.5})`
-        ctx.fillText(text, i * fontSize, drops[i] * fontSize)
-
-        if (drops[i] * fontSize > canvas.height && Math.random() > 0.975) {
-          drops[i] = 0
-        }
-        drops[i]++
-      }
-    }
-
-    const interval = setInterval(draw, 50)
-
-    const handleResize = () => {
-      canvas.width = window.innerWidth
-      canvas.height = window.innerHeight
-    }
-    window.addEventListener('resize', handleResize)
-
-    return () => {
-      clearInterval(interval)
-      window.removeEventListener('resize', handleResize)
-    }
-  }, [])
-
-  return (
-    <canvas
-      ref={canvasRef}
-      style={{
-        position: 'fixed',
-        top: 0,
-        left: 0,
-        width: '100%',
-        height: '100%',
-        zIndex: 0,
-        opacity: 0.15
-      }}
-    />
-  )
-}
-
-// Cyberpunk styles
-const cyberButtonStyle = {
-  padding: '0.75rem 1.5rem',
-  background: 'rgba(0, 255, 65, 0.1)',
-  border: '1px solid #00ff41',
-  borderRadius: 0,
-  color: '#00ff41',
-  cursor: 'pointer',
-  fontFamily: '"Fira Code", "Courier New", monospace',
-  fontSize: '0.875rem',
-  textTransform: 'uppercase',
-  letterSpacing: '0.1em',
-  position: 'relative',
-  overflow: 'hidden',
-  transition: 'all 0.3s ease'
-}
-
-const cyberInputStyle = {
-  width: '100%',
-  padding: '0.875rem 1rem',
-  background: 'rgba(0, 0, 0, 0.8)',
-  border: '1px solid #00ff41',
-  borderRadius: 0,
-  color: '#00ff41',
-  fontSize: '0.875rem',
-  outline: 'none',
-  fontFamily: '"Fira Code", "Courier New", monospace',
-  caretColor: '#00ff41'
-}
-
-const cyberPanelStyle = {
-  background: 'rgba(0, 0, 0, 0.9)',
-  border: '1px solid #00ff41',
-  padding: '1.5rem',
-  marginBottom: '1.5rem',
-  position: 'relative'
-}
+// MUST be set in environment - no fallback, no guessing
+const API_URL = process.env.NEXT_PUBLIC_API_URL
 
 export default function AdminPage() {
   const [password, setPassword] = useState('')
@@ -120,466 +18,657 @@ export default function AdminPage() {
   const [testResults, setTestResults] = useState(null)
   const [ragQuery, setRagQuery] = useState('')
   const [ragResults, setRagResults] = useState(null)
+  const [documents, setDocuments] = useState([])
+  const [showDocuments, setShowDocuments] = useState(false)
   
   const [isDragging, setIsDragging] = useState(false)
   const [selectedFile, setSelectedFile] = useState(null)
-  const [fileProcessing, setFileProcessing] = useState(false)
-  const [filePreview, setFilePreview] = useState(null)
   const fileInputRef = useRef(null)
 
-  const [displayedMessage, setDisplayedMessage] = useState('')
-  useEffect(() => {
-    if (message.text) {
-      let currentIndex = 0
-      setDisplayedMessage('')
-      const interval = setInterval(() => {
-        if (currentIndex < message.text.length) {
-          setDisplayedMessage(message.text.substring(0, currentIndex + 1))
-          currentIndex++
-        } else {
-          clearInterval(interval)
-        }
-      }, 10)
-      return () => clearInterval(interval)
-    } else {
-      setDisplayedMessage('')
+  // Chunking configuration
+  const [chunkStrategy, setChunkStrategy] = useState('semantic')
+  const [chunkSize, setChunkSize] = useState(512)
+  const [chunkOverlap, setChunkOverlap] = useState(64)
+  const [showChunkPreview, setShowChunkPreview] = useState(false)
+  const [chunks, setChunks] = useState([])
+  const [chunkStats, setChunkStats] = useState(null)
+
+  // Configuration check
+  if (!API_URL) {
+    return (
+      <div style={{ minHeight: '100vh', background: '#0a0a0f', color: '#e0e0e0', padding: '2rem', fontFamily: 'system-ui, sans-serif' }}>
+        <div style={{ maxWidth: 600, margin: '10rem auto', background: '#3a1a1a', padding: '2rem', borderRadius: '8px', border: '1px solid #ff4444' }}>
+          <h1 style={{ fontSize: '1.5rem', marginBottom: '1rem', color: '#ff4444' }}>Configuration Error</h1>
+          <p style={{ marginBottom: '1rem' }}>NEXT_PUBLIC_API_URL environment variable is not set.</p>
+          <p style={{ fontSize: '0.875rem', opacity: 0.8, marginBottom: '1rem' }}>Add this to your .env.local file:</p>
+          <pre style={{ background: '#0a0a0f', padding: '1rem', borderRadius: '4px', fontSize: '0.875rem' }}>
+NEXT_PUBLIC_API_URL=https://api.louisbersine.com
+          </pre>
+          <p style={{ fontSize: '0.875rem', opacity: 0.8, marginTop: '1rem' }}>Then restart your Next.js development server.</p>
+        </div>
+      </div>
+    )
+  }
+
+  // Client-side chunking for preview only
+  const chunkText = (text, strategy = 'semantic') => {
+    if (!text || !text.trim()) return { chunks: [], stats: null }
+
+    const results = []
+    
+    try {
+      switch (strategy) {
+        case 'fixed':
+          for (let i = 0; i < text.length; i += chunkSize - chunkOverlap) {
+            const chunk = text.slice(i, i + chunkSize).trim()
+            if (chunk) {
+              results.push({ text: chunk, size: chunk.length, type: 'fixed' })
+            }
+          }
+          break
+
+        case 'semantic':
+          const paragraphs = text.split(/\n\n+/)
+          let currentChunk = ''
+
+          for (const para of paragraphs) {
+            const testChunk = currentChunk ? currentChunk + '\n\n' + para : para
+            
+            if (testChunk.length > chunkSize && currentChunk) {
+              results.push({ text: currentChunk.trim(), size: currentChunk.length, type: 'semantic' })
+              currentChunk = para
+            } else {
+              currentChunk = testChunk
+            }
+          }
+
+          if (currentChunk.trim()) {
+            results.push({ text: currentChunk.trim(), size: currentChunk.length, type: 'semantic' })
+          }
+          break
+
+        case 'sentence':
+          const sentences = text.match(/[^.!?]+[.!?]+/g) || [text]
+          let sentenceChunk = ''
+
+          for (const sentence of sentences) {
+            const testChunk = sentenceChunk + sentence
+            
+            if (testChunk.length > chunkSize && sentenceChunk) {
+              results.push({ text: sentenceChunk.trim(), size: sentenceChunk.length, type: 'sentence' })
+              sentenceChunk = sentence
+            } else {
+              sentenceChunk = testChunk
+            }
+          }
+
+          if (sentenceChunk.trim()) {
+            results.push({ text: sentenceChunk.trim(), size: sentenceChunk.length, type: 'sentence' })
+          }
+          break
+
+        case 'recursive':
+          const recursiveSplit = (text, delimiters, maxSize) => {
+            if (!delimiters.length || text.length <= maxSize) {
+              return text.trim() ? [text.trim()] : []
+            }
+            const [delimiter, ...rest] = delimiters
+            const parts = text.split(delimiter)
+            const chunks = []
+            for (const part of parts) {
+              if (part.length <= maxSize) {
+                if (part.trim()) chunks.push(part.trim())
+              } else {
+                chunks.push(...recursiveSplit(part, rest, maxSize))
+              }
+            }
+            return chunks
+          }
+
+          const delimiters = ['\n\n', '\n', '. ', ' ']
+          const recursiveChunks = recursiveSplit(text, delimiters, chunkSize)
+          
+          for (const chunk of recursiveChunks) {
+            if (chunk.trim()) {
+              results.push({ text: chunk.trim(), size: chunk.length, type: 'recursive' })
+            }
+          }
+          break
+      }
+
+      const stats = {
+        totalChunks: results.length,
+        avgSize: results.length > 0 ? Math.round(results.reduce((sum, c) => sum + c.size, 0) / results.length) : 0,
+        minSize: results.length > 0 ? Math.min(...results.map(c => c.size)) : 0,
+        maxSize: results.length > 0 ? Math.max(...results.map(c => c.size)) : 0,
+        totalChars: text.length
+      }
+
+      return { chunks: results, stats }
+    } catch (error) {
+      console.error('Chunking error:', error)
+      return { chunks: [], stats: null }
     }
-  }, [message.text])
+  }
+
+  useEffect(() => {
+    if (text && text.trim()) {
+      const result = chunkText(text, chunkStrategy)
+      setChunks(result.chunks)
+      setChunkStats(result.stats)
+    } else {
+      setChunks([])
+      setChunkStats(null)
+    }
+  }, [text, chunkStrategy, chunkSize, chunkOverlap])
 
   const handleAuth = async () => {
     setIsLoading(true)
     try {
-      const response = await fetch(`/api/admin/upload?password=${encodeURIComponent(password)}`)
+      const response = await fetch(`${API_URL}/api/admin/upload?password=${encodeURIComponent(password)}`)
       if (response.ok) {
         setIsAuthenticated(true)
         const data = await response.json()
         setDbInfo(data)
-        setMessage({ type: 'success', text: '> ACCESS GRANTED. WELCOME TO THE MATRIX.' })
+        setMessage({ type: 'success', text: 'Access granted' })
+        // Load documents
+        loadDocuments()
       } else {
-        setMessage({ type: 'error', text: '> ACCESS DENIED. INVALID CREDENTIALS.' })
+        setMessage({ type: 'error', text: 'Invalid credentials' })
       }
     } catch (error) {
-      setMessage({ type: 'error', text: '> SYSTEM ERROR. CONNECTION FAILED.' })
+      setMessage({ type: 'error', text: 'Connection error: ' + error.message })
     }
     setIsLoading(false)
   }
 
+  const loadDocuments = async () => {
+    try {
+      const response = await fetch(`${API_URL}/api/admin/documents?password=${encodeURIComponent(password)}`)
+      if (response.ok) {
+        const data = await response.json()
+        setDocuments(data.documents || [])
+      }
+    } catch (error) {
+      console.error('Failed to load documents:', error)
+    }
+  }
+
+  const handleFileSelect = async (e) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+    
+    setSelectedFile(file)
+    
+    try {
+      if (file.type.startsWith('text/') || file.name.endsWith('.txt') || file.name.endsWith('.md') || file.name.endsWith('.csv')) {
+        const text = await file.text()
+        setText(text)
+        setTitle(file.name.replace(/\.[^/.]+$/, ''))
+        setMessage({ type: 'success', text: `Loaded: ${text.length} chars` })
+      } else if (file.type === 'application/pdf' || file.name.endsWith('.pdf')) {
+        setTitle(file.name.replace(/\.[^/.]+$/, ''))
+        setText('')
+        setMessage({ type: 'success', text: `PDF selected: ${file.name} - will extract on server` })
+      } else {
+        setMessage({ type: 'error', text: 'Unsupported file type. Use PDF, TXT, MD, or CSV' })
+        setSelectedFile(null)
+      }
+    } catch (error) {
+      setMessage({ type: 'error', text: 'File processing failed: ' + error.message })
+      setSelectedFile(null)
+    }
+  }
+
   const handleUpload = async (e) => {
     e.preventDefault()
-    if (!text.trim()) {
-      setMessage({ type: 'error', text: '> ERROR: NO DATA TO UPLOAD.' })
+    
+    if (!text.trim() && !selectedFile) {
+      setMessage({ type: 'error', text: 'Text or file required' })
+      return
+    }
+    
+    if (!title.trim()) {
+      setMessage({ type: 'error', text: 'Title required' })
       return
     }
 
     setIsLoading(true)
-    setMessage({ type: '', text: '' })
-
+    
     try {
-      const response = await fetch('/api/admin/upload', {
+      const formData = new FormData()
+      
+      if (selectedFile && selectedFile.type === 'application/pdf') {
+        formData.append('file', selectedFile)
+      } else if (text.trim()) {
+        formData.append('text', text)
+      }
+      
+      formData.append('title', title)
+      formData.append('category', category)
+      formData.append('chunkStrategy', chunkStrategy)
+      formData.append('chunkSize', chunkSize.toString())
+      formData.append('chunkOverlap', chunkOverlap.toString())
+
+      const response = await fetch(`${API_URL}/api/admin/upload?password=${encodeURIComponent(password)}`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ password, text, title, category })
+        body: formData
       })
 
       const data = await response.json()
 
       if (response.ok) {
-        const successMsg = data.errors && data.errors.length > 0
-          ? `> PARTIAL: ${data.chunksProcessed}/${data.totalChunks} CHUNKS`
-          : `> COMPLETE: ${data.chunksProcessed} CHUNKS INJECTED`
-        setMessage({ type: 'success', text: successMsg })
+        setMessage({ type: 'success', text: `Success: ${data.result?.chunksAdded || 0} chunks added` })
+        setDbInfo(prev => ({ ...prev, vectorCount: data.vectorCount }))
         setText('')
         setTitle('')
         setSelectedFile(null)
-        setFilePreview(null)
-        const infoResponse = await fetch(`/api/admin/upload?password=${encodeURIComponent(password)}`)
-        if (infoResponse.ok) {
-          setDbInfo(await infoResponse.json())
-        }
+        setChunks([])
+        setChunkStats(null)
+        // Reload documents to show what was added
+        loadDocuments()
       } else {
-        setMessage({ type: 'error', text: `> FAILED: ${data.error || 'UNKNOWN'}` })
+        setMessage({ type: 'error', text: data.error || 'Upload failed' })
       }
     } catch (error) {
-      setMessage({ type: 'error', text: '> CRITICAL ERROR' })
+      setMessage({ type: 'error', text: 'Upload failed: ' + error.message })
     }
+
     setIsLoading(false)
   }
 
   const handleClearDB = async () => {
-    if (!confirm('⚠️ PURGE ALL VECTORS?')) return
+    if (!confirm('Delete ALL vectors?')) return
+
     setIsLoading(true)
     try {
-      const response = await fetch('/api/admin/upload', {
-        method: 'DELETE',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ password })
+      const response = await fetch(`${API_URL}/api/admin/clear?password=${encodeURIComponent(password)}`, {
+        method: 'POST'
       })
+
+      const data = await response.json()
+
       if (response.ok) {
-        setMessage({ type: 'success', text: '> DATABASE PURGED.' })
-        setDbInfo({ result: { vectorCount: 0 } })
+        setMessage({ type: 'success', text: 'Database cleared' })
+        setDbInfo(prev => ({ ...prev, vectorCount: 0 }))
+        setDocuments([])
       } else {
-        setMessage({ type: 'error', text: '> PURGE FAILED.' })
+        setMessage({ type: 'error', text: data.error || 'Clear failed' })
       }
     } catch (error) {
-      setMessage({ type: 'error', text: '> ERROR.' })
+      setMessage({ type: 'error', text: 'Clear failed: ' + error.message })
     }
     setIsLoading(false)
   }
 
   const handleTestConfig = async () => {
     setIsLoading(true)
-    setTestResults(null)
-    setMessage({ type: '', text: '> RUNNING DIAGNOSTICS...' })
     try {
-      const response = await fetch('/api/admin/test', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ password })
-      })
+      const response = await fetch(`${API_URL}/api/admin/test-config?password=${encodeURIComponent(password)}`)
       const data = await response.json()
-      setTestResults(data)
-      setMessage({ type: 'success', text: '> DIAGNOSTICS COMPLETE.' })
+      
+      if (response.ok) {
+        setTestResults(data)
+        setMessage({ type: 'success', text: 'Diagnostics complete' })
+      } else {
+        setMessage({ type: 'error', text: data.error || 'Diagnostics failed' })
+      }
     } catch (error) {
-      setTestResults({ error: error.message })
+      setMessage({ type: 'error', text: 'Connection error: ' + error.message })
     }
     setIsLoading(false)
   }
 
   const handleTestRAG = async () => {
     if (!ragQuery.trim()) return
+
     setIsLoading(true)
-    setRagResults(null)
     try {
-      const response = await fetch('/api/chat', {
+      const response = await fetch(`${API_URL}/api/admin/test-rag?password=${encodeURIComponent(password)}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ message: ragQuery, debug: true })
+        body: JSON.stringify({ query: ragQuery })
       })
+
       const data = await response.json()
-      setRagResults(data)
+
+      if (response.ok) {
+        setRagResults(data)
+        setMessage({ type: 'success', text: 'Query complete' })
+      } else {
+        setMessage({ type: 'error', text: data.error || 'Query failed' })
+      }
     } catch (error) {
-      setRagResults({ error: error.message })
+      setMessage({ type: 'error', text: 'Query failed: ' + error.message })
     }
     setIsLoading(false)
   }
 
-  const handleDragOver = (e) => { e.preventDefault(); setIsDragging(true) }
-  const handleDragLeave = (e) => { e.preventDefault(); setIsDragging(false) }
-  const handleDrop = async (e) => {
-    e.preventDefault()
-    setIsDragging(false)
-    const file = e.dataTransfer.files[0]
-    if (file) await processFile(file)
-  }
-  const handleFileSelect = async (e) => {
-    const file = e.target.files[0]
-    if (file) await processFile(file)
-  }
-
-  const processFile = async (file) => {
-    setSelectedFile(file)
-    setFileProcessing(true)
-    setMessage({ type: '', text: `> PROCESSING: ${file.name}` })
-    setFilePreview(null)
-
-    try {
-      const formData = new FormData()
-      formData.append('file', file)
-      formData.append('password', password)
-
-      const response = await fetch('/api/admin/process-file', {
-        method: 'POST',
-        body: formData
-      })
-      const data = await response.json()
-
-      if (response.ok) {
-        setText(data.text)
-        setTitle(file.name.replace(/\.[^/.]+$/, ''))
-        setFilePreview({ fileName: data.fileName, method: data.processingMethod, textLength: data.textLength, preview: data.preview })
-        setMessage({ type: 'success', text: `> DECODED: ${data.textLength} CHARS [${data.processingMethod}]` })
-      } else {
-        setMessage({ type: 'error', text: `> FAILED: ${data.error}` })
-        setSelectedFile(null)
-      }
-    } catch (error) {
-      setMessage({ type: 'error', text: '> FILE ERROR' })
-      setSelectedFile(null)
-    }
-    setFileProcessing(false)
-  }
-
-  const clearFile = () => {
-    setSelectedFile(null)
-    setFilePreview(null)
-    setText('')
-    setTitle('')
-    if (fileInputRef.current) fileInputRef.current.value = ''
-  }
-
-  const getFileIcon = (fileName) => {
-    const ext = fileName?.split('.').pop()?.toLowerCase()
-    if (['jpg', 'jpeg', 'png', 'gif', 'webp'].includes(ext)) return <Image size={20} />
-    if (ext === 'pdf') return <FileText size={20} />
-    if (ext === 'csv') return <FileSpreadsheet size={20} />
-    return <File size={20} />
-  }
-
-  // LOGIN SCREEN
   if (!isAuthenticated) {
     return (
-      <div style={{
-        minHeight: '100vh',
-        background: '#000',
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-        padding: '2rem',
-        fontFamily: '"Fira Code", "Courier New", monospace',
-        position: 'relative',
-        overflow: 'hidden'
-      }}>
-        <MatrixRain />
-        <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'repeating-linear-gradient(0deg, rgba(0,0,0,0.1) 0px, rgba(0,0,0,0.1) 1px, transparent 1px, transparent 2px)', pointerEvents: 'none', zIndex: 100 }} />
-
-        <motion.div initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }} style={{ ...cyberPanelStyle, maxWidth: 450, width: '100%', zIndex: 10 }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', marginBottom: '1.5rem' }}>
-            <Terminal size={32} color="#00ff41" />
-            <div>
-              <div style={{ color: '#00ff41', fontSize: '1.25rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.2em' }}>SYSTEM ACCESS</div>
-              <div style={{ color: '#00ff4180', fontSize: '0.75rem' }}>AUTHORIZATION REQUIRED</div>
-            </div>
-          </div>
-
-          <div style={{ color: '#00ff41', marginBottom: '1rem', fontSize: '0.75rem' }}>{'>'} ENTER ACCESS CODE:</div>
-
-          <input
-            type="password"
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            onKeyDown={(e) => e.key === 'Enter' && handleAuth()}
-            placeholder="****************"
-            style={{ ...cyberInputStyle, marginBottom: '1rem' }}
-          />
-
-          <motion.button
-            onClick={handleAuth}
-            disabled={isLoading || !password}
-            whileHover={{ boxShadow: '0 0 20px #00ff4150' }}
-            whileTap={{ scale: 0.98 }}
-            style={{ ...cyberButtonStyle, width: '100%', opacity: password ? 1 : 0.5 }}
-          >
-            {isLoading ? <><Loader2 size={16} className="spin" /> AUTHENTICATING...</> : '[ AUTHENTICATE ]'}
-          </motion.button>
+      <div style={{ minHeight: '100vh', background: '#0a0a0f', color: '#e0e0e0', padding: '2rem', fontFamily: 'system-ui, sans-serif' }}>
+        <div style={{ maxWidth: 400, margin: '10rem auto', background: '#1a1a2e', padding: '2rem', borderRadius: '8px', border: '1px solid #333' }}>
+          <h1 style={{ fontSize: '1.5rem', marginBottom: '0.5rem' }}>RAG Admin</h1>
+          <p style={{ fontSize: '0.875rem', opacity: 0.6, marginBottom: '1.5rem' }}>API: {API_URL}</p>
+          
+          <form onSubmit={(e) => { e.preventDefault(); handleAuth(); }}>
+            <input
+              type="password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              placeholder="Password"
+              style={{ width: '100%', padding: '0.75rem', background: '#0a0a0f', border: '1px solid #333', borderRadius: '4px', color: '#e0e0e0', marginBottom: '1rem' }}
+            />
+            
+            <button
+              type="submit"
+              disabled={isLoading}
+              style={{ width: '100%', padding: '0.75rem', background: '#4a9eff', border: 'none', borderRadius: '4px', color: '#fff', cursor: isLoading ? 'wait' : 'pointer' }}
+            >
+              {isLoading ? 'Connecting...' : 'Login'}
+            </button>
+          </form>
 
           {message.text && (
-            <div style={{
-              marginTop: '1rem', padding: '0.75rem',
-              background: message.type === 'error' ? 'rgba(255, 0, 0, 0.1)' : 'rgba(0, 255, 65, 0.1)',
-              border: `1px solid ${message.type === 'error' ? '#ff0000' : '#00ff41'}`,
-              color: message.type === 'error' ? '#ff0000' : '#00ff41',
-              fontSize: '0.75rem'
-            }}>
-              {displayedMessage}<span className="blink">_</span>
+            <div style={{ marginTop: '1rem', padding: '0.75rem', background: message.type === 'error' ? '#3a1a1a' : '#1a3a1a', border: `1px solid ${message.type === 'error' ? '#ff4444' : '#44ff44'}`, borderRadius: '4px', fontSize: '0.875rem' }}>
+              {message.text}
             </div>
           )}
-        </motion.div>
-
-        <style jsx global>{`
-          .spin { animation: spin 1s linear infinite; }
-          @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
-          .blink { animation: blink 1s infinite; }
-          @keyframes blink { 0%, 50% { opacity: 1; } 51%, 100% { opacity: 0; } }
-        `}</style>
+        </div>
       </div>
     )
   }
 
-  // MAIN ADMIN PANEL
   return (
-    <div style={{ minHeight: '100vh', background: '#000', padding: '2rem', fontFamily: '"Fira Code", "Courier New", monospace', color: '#00ff41', position: 'relative', overflow: 'hidden' }}>
-      <MatrixRain />
-      <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'repeating-linear-gradient(0deg, rgba(0,0,0,0.1) 0px, rgba(0,0,0,0.1) 1px, transparent 1px, transparent 2px)', pointerEvents: 'none', zIndex: 100 }} />
+    <div style={{ minHeight: '100vh', background: '#0a0a0f', color: '#e0e0e0', padding: '2rem', fontFamily: 'system-ui, sans-serif' }}>
+      <div style={{ maxWidth: 1200, margin: '0 auto' }}>
+        <div style={{ marginBottom: '2rem', textAlign: 'center' }}>
+          <h1 style={{ fontSize: '2rem', marginBottom: '0.5rem' }}>RAG Knowledge Base</h1>
+          <p style={{ fontSize: '0.875rem', opacity: 0.6 }}>API: {API_URL}</p>
+        </div>
 
-      <div style={{ maxWidth: 900, margin: '0 auto', position: 'relative', zIndex: 10 }}>
-        {/* Header */}
-        <motion.div initial={{ opacity: 0, y: -20 }} animate={{ opacity: 1, y: 0 }} style={{ marginBottom: '2rem' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', marginBottom: '0.5rem' }}>
-            <Terminal size={32} />
-            <h1 style={{ fontSize: '1.75rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.2em', textShadow: '0 0 10px #00ff41' }}>RAG CONTROL TERMINAL</h1>
-          </div>
-          <div style={{ color: '#00ff4180', fontSize: '0.75rem', marginLeft: '3rem' }}>NEURAL NETWORK KNOWLEDGE BASE v2.0</div>
-        </motion.div>
-
-        {/* Message */}
         {message.text && (
-          <motion.div initial={{ opacity: 0, x: -20 }} animate={{ opacity: 1, x: 0 }} style={{
-            marginBottom: '1.5rem', padding: '1rem',
-            background: message.type === 'error' ? 'rgba(255, 0, 0, 0.1)' : 'rgba(0, 255, 65, 0.1)',
-            border: `1px solid ${message.type === 'error' ? '#ff0000' : '#00ff41'}`,
-            color: message.type === 'error' ? '#ff0000' : '#00ff41',
-            display: 'flex', alignItems: 'center', justifyContent: 'space-between'
-          }}>
-            <span>{displayedMessage}<span className="blink">_</span></span>
-            <button onClick={() => setMessage({ type: '', text: '' })} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'inherit' }}><X size={18} /></button>
-          </motion.div>
+          <div style={{ marginBottom: '1.5rem', padding: '1rem', background: message.type === 'error' ? '#3a1a1a' : '#1a3a1a', border: `1px solid ${message.type === 'error' ? '#ff4444' : '#44ff44'}`, borderRadius: '4px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <span>{message.text}</span>
+            <button onClick={() => setMessage({ type: '', text: '' })} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#e0e0e0', fontSize: '1.25rem' }}>×</button>
+          </div>
         )}
 
         {/* Database Status */}
         {dbInfo && (
-          <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} style={cyberPanelStyle}>
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '1rem' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
-                <Database size={24} />
-                <div>
-                  <div style={{ fontSize: '0.625rem', opacity: 0.6, textTransform: 'uppercase', letterSpacing: '0.2em' }}>VECTOR DATABASE</div>
-                  <div style={{ fontSize: '1.5rem', fontWeight: 700, textShadow: '0 0 10px #00ff41' }}>{dbInfo.result?.vectorCount ?? dbInfo.vectorCount ?? 0} <span style={{ fontSize: '0.75rem', opacity: 0.6 }}>VECTORS</span></div>
-                </div>
+          <div style={{ padding: '1.5rem', background: '#1a1a2e', border: '1px solid #333', borderRadius: '8px', marginBottom: '1.5rem' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '1rem' }}>
+              <div>
+                <div style={{ fontSize: '0.75rem', opacity: 0.6 }}>VECTORS</div>
+                <div style={{ fontSize: '2rem', fontWeight: 700 }}>{dbInfo.vectorCount ?? 0}</div>
               </div>
-              <div style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap' }}>
-                <motion.button onClick={handleClearDB} disabled={isLoading} whileHover={{ boxShadow: '0 0 15px rgba(255,0,0,0.3)' }} style={{ ...cyberButtonStyle, color: '#ff0000', borderColor: '#ff0000', background: 'rgba(255, 0, 0, 0.1)' }}>
-                  <Trash2 size={14} style={{ marginRight: '0.5rem' }} />PURGE
-                </motion.button>
-                <motion.button onClick={handleTestConfig} disabled={isLoading} whileHover={{ boxShadow: '0 0 15px rgba(0,255,255,0.3)' }} style={{ ...cyberButtonStyle, color: '#00ffff', borderColor: '#00ffff', background: 'rgba(0, 255, 255, 0.1)' }}>
-                  DIAGNOSTICS
-                </motion.button>
+              <div style={{ display: 'flex', gap: '0.75rem' }}>
+                <button onClick={handleClearDB} disabled={isLoading} style={{ padding: '0.75rem 1.5rem', background: '#ff4444', border: 'none', borderRadius: '4px', color: '#fff', cursor: 'pointer' }}>
+                  Clear DB
+                </button>
+                <button onClick={handleTestConfig} disabled={isLoading} style={{ padding: '0.75rem 1.5rem', background: '#4a9eff', border: 'none', borderRadius: '4px', color: '#fff', cursor: 'pointer' }}>
+                  Diagnostics
+                </button>
+                <button onClick={loadDocuments} disabled={isLoading} style={{ padding: '0.75rem 1.5rem', background: '#44ff44', border: 'none', borderRadius: '4px', color: '#000', cursor: 'pointer' }}>
+                  Refresh
+                </button>
               </div>
             </div>
-          </motion.div>
+          </div>
+        )}
+
+        {/* Documents List */}
+        {documents.length > 0 && (
+          <div style={{ padding: '1.5rem', background: '#1a1a2e', border: '1px solid #333', borderRadius: '8px', marginBottom: '1.5rem' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
+              <h3>Documents in Database ({documents.length})</h3>
+              <button
+                onClick={() => setShowDocuments(!showDocuments)}
+                style={{ padding: '0.5rem 1rem', background: '#4a9eff', border: 'none', borderRadius: '4px', color: '#fff', cursor: 'pointer' }}
+              >
+                {showDocuments ? 'Hide' : 'Show'}
+              </button>
+            </div>
+            
+            {showDocuments && (
+              <div style={{ maxHeight: '400px', overflowY: 'auto' }}>
+                {documents.map((doc, idx) => (
+                  <div key={idx} style={{ background: '#0a0a0f', padding: '1rem', marginBottom: '0.5rem', borderRadius: '4px', borderLeft: '3px solid #4a9eff' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.5rem' }}>
+                      <div style={{ fontWeight: 700 }}>{doc.title}</div>
+                      <div style={{ fontSize: '0.75rem', opacity: 0.6 }}>
+                        {doc.chunks} chunks | {doc.category} | {doc.strategy}
+                      </div>
+                    </div>
+                    <div style={{ fontSize: '0.875rem', opacity: 0.7 }}>
+                      {doc.firstChunk}...
+                    </div>
+                    <div style={{ fontSize: '0.75rem', opacity: 0.5, marginTop: '0.5rem' }}>
+                      {new Date(doc.timestamp).toLocaleString()}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
         )}
 
         {/* Test Results */}
         {testResults && (
-          <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} style={{ ...cyberPanelStyle, fontSize: '0.7rem' }}>
-            <div style={{ marginBottom: '0.5rem', color: '#00ffff', textTransform: 'uppercase' }}>{'>'} DIAGNOSTICS:</div>
-            <pre style={{ margin: 0, whiteSpace: 'pre-wrap', color: '#00ff41' }}>{JSON.stringify(testResults, null, 2)}</pre>
-          </motion.div>
+          <div style={{ padding: '1.5rem', background: '#1a1a2e', border: '1px solid #333', borderRadius: '8px', marginBottom: '1.5rem' }}>
+            <h3 style={{ marginBottom: '1rem' }}>Diagnostics</h3>
+            <pre style={{ fontSize: '0.75rem', overflow: 'auto', maxHeight: '400px', background: '#0a0a0f', padding: '1rem', borderRadius: '4px', whiteSpace: 'pre-wrap' }}>{JSON.stringify(testResults, null, 2)}</pre>
+          </div>
         )}
 
         {/* RAG Test */}
-        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 }} style={cyberPanelStyle}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginBottom: '1rem' }}>
-            <Search size={20} />
-            <span style={{ textTransform: 'uppercase', letterSpacing: '0.1em' }}>NEURAL QUERY TEST</span>
-          </div>
+        <div style={{ padding: '1.5rem', background: '#1a1a2e', border: '1px solid #333', borderRadius: '8px', marginBottom: '1.5rem' }}>
+          <h3 style={{ marginBottom: '1rem' }}>Query Test</h3>
           <div style={{ display: 'flex', gap: '0.75rem', marginBottom: '1rem' }}>
-            <input type="text" value={ragQuery} onChange={(e) => setRagQuery(e.target.value)} placeholder="> ENTER QUERY..." style={{ ...cyberInputStyle, flex: 1 }} onKeyDown={(e) => e.key === 'Enter' && handleTestRAG()} />
-            <motion.button onClick={handleTestRAG} disabled={isLoading || !ragQuery.trim()} whileHover={{ boxShadow: '0 0 15px #00ff4150' }} style={{ ...cyberButtonStyle, opacity: ragQuery.trim() ? 1 : 0.5 }}>
-              {isLoading ? <Loader2 size={16} className="spin" /> : 'EXECUTE'}
-            </motion.button>
+            <input 
+              type="text" 
+              value={ragQuery} 
+              onChange={(e) => setRagQuery(e.target.value)} 
+              placeholder="Enter query..." 
+              style={{ flex: 1, padding: '0.75rem', background: '#0a0a0f', border: '1px solid #333', borderRadius: '4px', color: '#e0e0e0' }}
+              onKeyDown={(e) => e.key === 'Enter' && handleTestRAG()}
+            />
+            <button 
+              onClick={handleTestRAG} 
+              disabled={isLoading || !ragQuery.trim()} 
+              style={{ padding: '0.75rem 1.5rem', background: '#4a9eff', border: 'none', borderRadius: '4px', color: '#fff', cursor: ragQuery.trim() ? 'pointer' : 'not-allowed', opacity: ragQuery.trim() ? 1 : 0.5 }}
+            >
+              Execute
+            </button>
           </div>
           {ragResults && (
-            <div style={{ background: 'rgba(0, 0, 0, 0.5)', padding: '1rem', border: '1px solid #00ff4140', fontSize: '0.75rem' }}>
+            <div style={{ background: '#0a0a0f', padding: '1rem', borderRadius: '4px', fontSize: '0.875rem' }}>
               <div style={{ marginBottom: '1rem' }}>
-                <div style={{ color: '#00ffff', marginBottom: '0.5rem' }}>{'>'} RAG DEBUG:</div>
-                <div>EMBEDDING: {ragResults.ragDebug?.embeddingGenerated ? '[OK]' : '[FAIL]'}</div>
-                <div>RESULTS: {ragResults.ragDebug?.resultsFound ?? 0} | RELEVANT: {ragResults.ragDebug?.relevantResults ?? 0}</div>
+                <div style={{ opacity: 0.6, marginBottom: '0.5rem' }}>RAG Debug:</div>
+                <div>Embedding: {ragResults.ragDebug?.embeddingGenerated ? 'OK' : 'FAIL'}</div>
+                <div>Results: {ragResults.ragDebug?.resultsFound ?? 0} | Relevant: {ragResults.ragDebug?.relevantResults ?? 0}</div>
               </div>
               {ragResults.ragDebug?.chunks?.length > 0 && (
                 <div style={{ marginBottom: '1rem' }}>
-                  <div style={{ color: '#ff00ff', marginBottom: '0.5rem' }}>{'>'} CHUNKS:</div>
+                  <div style={{ opacity: 0.6, marginBottom: '0.5rem' }}>Chunks:</div>
                   {ragResults.ragDebug.chunks.map((chunk, i) => (
-                    <div key={i} style={{ background: 'rgba(0, 255, 65, 0.05)', padding: '0.5rem', marginBottom: '0.5rem', borderLeft: '2px solid #00ff41' }}>
-                      <div style={{ color: '#00ffff' }}>SCORE: {chunk.score?.toFixed(3)} | {chunk.title}</div>
-                      <div style={{ opacity: 0.7 }}>{chunk.preview}</div>
+                    <div key={i} style={{ background: '#1a1a2e', padding: '0.5rem', marginBottom: '0.5rem', borderLeft: '3px solid #4a9eff' }}>
+                      <div>Score: {chunk.score?.toFixed(3)} | {chunk.title}</div>
+                      <div style={{ opacity: 0.7, fontSize: '0.75rem' }}>{chunk.preview}</div>
                     </div>
                   ))}
                 </div>
               )}
               <div>
-                <div style={{ color: '#ffff00', marginBottom: '0.5rem' }}>{'>'} RESPONSE:</div>
+                <div style={{ opacity: 0.6, marginBottom: '0.5rem' }}>Response:</div>
                 <div style={{ whiteSpace: 'pre-wrap' }}>{ragResults.response}</div>
               </div>
             </div>
           )}
-        </motion.div>
+        </div>
 
-        {/* File Upload */}
-        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.2 }} style={cyberPanelStyle}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginBottom: '1rem' }}>
-            <Upload size={20} />
-            <span style={{ textTransform: 'uppercase', letterSpacing: '0.1em' }}>FILE INJECTION</span>
+        {/* Chunking Config */}
+        <div style={{ padding: '1.5rem', background: '#1a1a2e', border: '1px solid #333', borderRadius: '8px', marginBottom: '1.5rem' }}>
+          <h3 style={{ marginBottom: '1rem' }}>Chunking Configuration</h3>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '1rem', marginBottom: '1rem' }}>
+            <div>
+              <label style={{ display: 'block', fontSize: '0.75rem', opacity: 0.6, marginBottom: '0.5rem' }}>Strategy</label>
+              <select value={chunkStrategy} onChange={(e) => setChunkStrategy(e.target.value)} style={{ width: '100%', padding: '0.75rem', background: '#0a0a0f', border: '1px solid #333', borderRadius: '4px', color: '#e0e0e0' }}>
+                <option value="semantic">Semantic (Paragraphs)</option>
+                <option value="sentence">Sentence-based</option>
+                <option value="fixed">Fixed-size</option>
+                <option value="recursive">Recursive</option>
+              </select>
+            </div>
+
+            <div>
+              <label style={{ display: 'block', fontSize: '0.75rem', opacity: 0.6, marginBottom: '0.5rem' }}>Chunk Size: {chunkSize}</label>
+              <input 
+                type="range" 
+                min="128" 
+                max="2048" 
+                step="64" 
+                value={chunkSize} 
+                onChange={(e) => setChunkSize(parseInt(e.target.value))}
+                style={{ width: '100%' }}
+              />
+            </div>
+
+            <div>
+              <label style={{ display: 'block', fontSize: '0.75rem', opacity: 0.6, marginBottom: '0.5rem' }}>Overlap: {chunkOverlap}</label>
+              <input 
+                type="range" 
+                min="0" 
+                max="256" 
+                step="16" 
+                value={chunkOverlap} 
+                onChange={(e) => setChunkOverlap(parseInt(e.target.value))}
+                style={{ width: '100%' }}
+              />
+            </div>
           </div>
-          <div style={{ fontSize: '0.75rem', opacity: 0.6, marginBottom: '1rem' }}>PDF / TXT / MD / CSV / JPG / PNG / GIF / WEBP</div>
-          <div
-            onDragOver={handleDragOver}
-            onDragLeave={handleDragLeave}
-            onDrop={handleDrop}
-            onClick={() => fileInputRef.current?.click()}
-            style={{
-              border: `2px dashed ${isDragging ? '#00ff41' : '#00ff4140'}`,
-              padding: '2rem', textAlign: 'center', cursor: 'pointer',
-              background: isDragging ? 'rgba(0, 255, 65, 0.05)' : 'transparent', marginBottom: '1rem'
-            }}
-          >
-            <input ref={fileInputRef} type="file" accept=".pdf,.txt,.md,.csv,.jpg,.jpeg,.png,.gif,.webp" onChange={handleFileSelect} style={{ display: 'none' }} />
-            {fileProcessing ? (
-              <div><Loader2 size={40} className="spin" style={{ marginBottom: '1rem' }} /><div>DECODING...</div></div>
-            ) : selectedFile ? (
-              <div>
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.75rem', marginBottom: '0.5rem' }}>
-                  {getFileIcon(selectedFile.name)}<span>{selectedFile.name}</span>
-                  <button onClick={(e) => { e.stopPropagation(); clearFile(); }} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#ff0000' }}><X size={18} /></button>
+
+          {chunkStats && (
+            <div style={{ background: '#0a0a0f', padding: '1rem', borderRadius: '4px', marginBottom: '1rem' }}>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(100px, 1fr))', gap: '1rem', fontSize: '0.875rem' }}>
+                <div>
+                  <div style={{ opacity: 0.6 }}>Total Chunks</div>
+                  <div style={{ fontSize: '1.5rem', fontWeight: 700 }}>{chunkStats.totalChunks}</div>
                 </div>
-                {filePreview && <span style={{ opacity: 0.6, fontSize: '0.75rem' }}>{filePreview.textLength} CHARS</span>}
+                <div>
+                  <div style={{ opacity: 0.6 }}>Avg Size</div>
+                  <div style={{ fontSize: '1.5rem', fontWeight: 700 }}>{chunkStats.avgSize}</div>
+                </div>
+                <div>
+                  <div style={{ opacity: 0.6 }}>Min Size</div>
+                  <div style={{ fontSize: '1.5rem', fontWeight: 700 }}>{chunkStats.minSize}</div>
+                </div>
+                <div>
+                  <div style={{ opacity: 0.6 }}>Max Size</div>
+                  <div style={{ fontSize: '1.5rem', fontWeight: 700 }}>{chunkStats.maxSize}</div>
+                </div>
               </div>
-            ) : (
-              <><Upload size={40} style={{ opacity: 0.3, marginBottom: '1rem' }} /><div>DROP FILE OR CLICK</div></>
-            )}
-          </div>
-          {filePreview && (
-            <div style={{ background: 'rgba(0, 0, 0, 0.5)', padding: '1rem', border: '1px solid #00ff4140', marginBottom: '1rem', fontSize: '0.75rem' }}>
-              <div style={{ color: '#ffff00', marginBottom: '0.5rem' }}>{'>'} EXTRACTED [{filePreview.method}]:</div>
-              <div style={{ opacity: 0.7, maxHeight: 150, overflow: 'auto', whiteSpace: 'pre-wrap' }}>{filePreview.preview}</div>
             </div>
           )}
-        </motion.div>
+
+          {chunks.length > 0 && (
+            <button
+              onClick={() => setShowChunkPreview(!showChunkPreview)}
+              style={{ width: '100%', padding: '0.75rem', background: '#4a9eff', border: 'none', borderRadius: '4px', color: '#fff', cursor: 'pointer', marginBottom: showChunkPreview ? '1rem' : 0 }}
+            >
+              {showChunkPreview ? 'Hide' : 'Show'} Chunks ({chunks.length})
+            </button>
+          )}
+
+          {showChunkPreview && chunks.length > 0 && (
+            <div style={{ maxHeight: '400px', overflowY: 'auto', background: '#0a0a0f', padding: '1rem', borderRadius: '4px' }}>
+              {chunks.map((chunk, idx) => (
+                <div key={idx} style={{ background: '#1a1a2e', padding: '0.75rem', marginBottom: '0.5rem', borderRadius: '4px', fontSize: '0.875rem' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.5rem', opacity: 0.6 }}>
+                    <span>Chunk #{idx + 1}</span>
+                    <span>{chunk.size} chars | {chunk.type}</span>
+                  </div>
+                  <div style={{ opacity: 0.9 }}>{chunk.text.substring(0, 200)}{chunk.text.length > 200 && '...'}</div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+
+        {/* File Upload */}
+        <div style={{ padding: '1.5rem', background: '#1a1a2e', border: '1px solid #333', borderRadius: '8px', marginBottom: '1.5rem' }}>
+          <h3 style={{ marginBottom: '1rem' }}>File Upload</h3>
+          <div
+            onDragOver={(e) => { e.preventDefault(); setIsDragging(true); }}
+            onDragLeave={(e) => { e.preventDefault(); setIsDragging(false); }}
+            onDrop={(e) => { e.preventDefault(); setIsDragging(false); const file = e.dataTransfer.files[0]; if (file) handleFileSelect({ target: { files: [file] } }); }}
+            onClick={() => fileInputRef.current?.click()}
+            style={{ border: `2px dashed ${isDragging ? '#4a9eff' : '#333'}`, padding: '2rem', textAlign: 'center', cursor: 'pointer', background: isDragging ? 'rgba(74, 158, 255, 0.1)' : '#0a0a0f', borderRadius: '4px', marginBottom: '1rem' }}
+          >
+            <input ref={fileInputRef} type="file" accept=".pdf,.txt,.md,.csv" onChange={handleFileSelect} style={{ display: 'none' }} />
+            {selectedFile ? (
+              <div>
+                <File size={40} style={{ marginBottom: '0.5rem', opacity: 0.6 }} />
+                <div>{selectedFile.name}</div>
+                <button onClick={(e) => { e.stopPropagation(); setSelectedFile(null); setText(''); setTitle(''); }} style={{ marginTop: '0.5rem', padding: '0.5rem 1rem', background: '#ff4444', border: 'none', borderRadius: '4px', color: '#fff', cursor: 'pointer' }}>Remove</button>
+              </div>
+            ) : (
+              <>
+                <Upload size={40} style={{ marginBottom: '0.5rem', opacity: 0.6 }} />
+                <div>Drop file or click to browse</div>
+                <div style={{ fontSize: '0.75rem', opacity: 0.6, marginTop: '0.5rem' }}>PDF, TXT, MD, CSV</div>
+              </>
+            )}
+          </div>
+        </div>
 
         {/* Upload Form */}
-        <motion.form onSubmit={handleUpload} initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.3 }} style={cyberPanelStyle}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginBottom: '1.5rem' }}>
-            <FileText size={20} />
-            <span style={{ textTransform: 'uppercase', letterSpacing: '0.1em' }}>{selectedFile ? 'CONFIRM INJECTION' : 'MANUAL ENTRY'}</span>
+        <form onSubmit={handleUpload} style={{ padding: '1.5rem', background: '#1a1a2e', border: '1px solid #333', borderRadius: '8px' }}>
+          <h3 style={{ marginBottom: '1rem' }}>Upload Document</h3>
+
+          <div style={{ marginBottom: '1rem' }}>
+            <label style={{ display: 'block', fontSize: '0.75rem', opacity: 0.6, marginBottom: '0.5rem' }}>Title</label>
+            <input 
+              type="text" 
+              value={title} 
+              onChange={(e) => setTitle(e.target.value)} 
+              placeholder="Document title" 
+              style={{ width: '100%', padding: '0.75rem', background: '#0a0a0f', border: '1px solid #333', borderRadius: '4px', color: '#e0e0e0' }}
+            />
           </div>
 
           <div style={{ marginBottom: '1rem' }}>
-            <label style={{ display: 'block', fontSize: '0.625rem', opacity: 0.6, textTransform: 'uppercase', letterSpacing: '0.2em', marginBottom: '0.5rem' }}>IDENTIFIER</label>
-            <input type="text" value={title} onChange={(e) => setTitle(e.target.value)} placeholder="> TITLE" style={cyberInputStyle} />
-          </div>
-
-          <div style={{ marginBottom: '1rem' }}>
-            <label style={{ display: 'block', fontSize: '0.625rem', opacity: 0.6, textTransform: 'uppercase', letterSpacing: '0.2em', marginBottom: '0.5rem' }}>CLASSIFICATION</label>
-            <select value={category} onChange={(e) => setCategory(e.target.value)} style={cyberInputStyle}>
-              <option value="general">GENERAL</option>
-              <option value="experience">EXPERIENCE</option>
-              <option value="projects">PROJECTS</option>
-              <option value="skills">SKILLS</option>
-              <option value="education">EDUCATION</option>
-              <option value="personal">PERSONAL</option>
+            <label style={{ display: 'block', fontSize: '0.75rem', opacity: 0.6, marginBottom: '0.5rem' }}>Category</label>
+            <select value={category} onChange={(e) => setCategory(e.target.value)} style={{ width: '100%', padding: '0.75rem', background: '#0a0a0f', border: '1px solid #333', borderRadius: '4px', color: '#e0e0e0' }}>
+              <option value="general">General</option>
+              <option value="experience">Experience</option>
+              <option value="projects">Projects</option>
+              <option value="skills">Skills</option>
+              <option value="education">Education</option>
+              <option value="personal">Personal</option>
             </select>
           </div>
 
           <div style={{ marginBottom: '1.5rem' }}>
-            <label style={{ display: 'block', fontSize: '0.625rem', opacity: 0.6, textTransform: 'uppercase', letterSpacing: '0.2em', marginBottom: '0.5rem' }}>DATA ({text.length} CHARS)</label>
-            <textarea value={text} onChange={(e) => setText(e.target.value)} placeholder="> ENTER DATA..." rows={10} style={{ ...cyberInputStyle, resize: 'vertical', minHeight: 200 }} />
+            <label style={{ display: 'block', fontSize: '0.75rem', opacity: 0.6, marginBottom: '0.5rem' }}>Text {text.length > 0 && `(${text.length} chars)`} {chunkStats && `• ${chunkStats.totalChunks} chunks`}</label>
+            <textarea 
+              value={text} 
+              onChange={(e) => setText(e.target.value)} 
+              placeholder="Paste text here or upload a file above..." 
+              rows={10} 
+              style={{ width: '100%', padding: '0.75rem', background: '#0a0a0f', border: '1px solid #333', borderRadius: '4px', color: '#e0e0e0', resize: 'vertical', minHeight: 200, fontFamily: 'monospace', fontSize: '0.875rem' }}
+            />
           </div>
 
-          <motion.button type="submit" disabled={isLoading || !text.trim()} whileHover={{ boxShadow: text.trim() ? '0 0 20px #00ff4150' : 'none' }} style={{ ...cyberButtonStyle, width: '100%', opacity: text.trim() ? 1 : 0.5, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.5rem' }}>
-            {isLoading ? <><Loader2 size={16} className="spin" /> INJECTING...</> : <><Upload size={16} /> [ INJECT INTO MATRIX ]</>}
-          </motion.button>
-        </motion.form>
+          <button 
+            type="submit" 
+            disabled={isLoading || (!text.trim() && !selectedFile) || !title.trim()} 
+            style={{ width: '100%', padding: '0.75rem', background: '#4a9eff', border: 'none', borderRadius: '4px', color: '#fff', cursor: (text.trim() || selectedFile) && title.trim() ? 'pointer' : 'not-allowed', opacity: (text.trim() || selectedFile) && title.trim() ? 1 : 0.5 }}
+          >
+            {isLoading ? 'Uploading...' : `Upload ${chunkStats?.totalChunks || 0} Chunks`}
+          </button>
+        </form>
       </div>
-
-      <style jsx global>{`
-        .spin { animation: spin 1s linear infinite; }
-        @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
-        .blink { animation: blink 1s infinite; }
-        @keyframes blink { 0%, 50% { opacity: 1; } 51%, 100% { opacity: 0; } }
-        ::selection { background: #00ff41; color: #000; }
-        ::-webkit-scrollbar { width: 8px; }
-        ::-webkit-scrollbar-track { background: #000; }
-        ::-webkit-scrollbar-thumb { background: #00ff41; }
-      `}</style>
     </div>
   )
 }

@@ -10,9 +10,21 @@
   "monetaryValue": null,
   "monetaryWord": null,
   "tags": [
+    "2023",
     "VR",
     "AI",
     "LLM",
     "Theater"
-  ]
+  ],
+  "year": 2023,
+  "yearIsEstimate": true,
+  "emoji": "🪓",
+  "valueEstimate": {
+    "unit": "total",
+    "label": null,
+    "usdLow": null,
+    "usdHigh": null,
+    "note": "No numeric value in project data; add an estimate if you want one shown."
+  },
+  "valueEstimateNeedsInput": true
 }

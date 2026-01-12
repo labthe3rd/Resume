@@ -1,0 +1,10 @@
+{
+  "title": "Skill Category Title",
+  "icon": "Code2",
+  "color": "#00d4ff",
+  "skills": [
+    "Skill 1",
+    "Skill 2",
+    "Skill 3"
+  ]
+}

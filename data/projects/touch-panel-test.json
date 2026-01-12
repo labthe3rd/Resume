@@ -10,9 +10,20 @@
   "monetaryValue": "120,000",
   "monetaryWord": "Project",
   "tags": [
+    "2022",
     "EV",
     "Touch Panels",
     "Testing",
     "Automation"
-  ]
+  ],
+  "year": 2022,
+  "yearIsEstimate": true,
+  "emoji": "🧴",
+  "valueEstimate": {
+    "unit": "total",
+    "label": "Project",
+    "usdLow": 120000,
+    "usdHigh": 120000,
+    "note": null
+  }
 }

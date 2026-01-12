@@ -1,0 +1,30 @@
+{
+  "title": "Automotive Tesla Robot Grease Station Software",
+  "company": "Tesla (Tier-1 Supplier)",
+  "category": "Robotics",
+  "icon": "Bot",
+  "color": "#ec4899",
+  "problem": "Required consistent robotic cell behavior, safety integration, and repeatable recovery to protect uptime.",
+  "solution": "Implemented robot and PLC integration with fault recovery patterns, safety interlocks, and operator-friendly HMI workflows.",
+  "benefit": "Improved cycle stability and reduced time-to-recover from common faults during production.",
+  "monetaryValue": "6-figure+",
+  "monetaryWord": "Project Scale",
+  "tags": [
+    "2021",
+    "Automotive",
+    "Uptime",
+    "Standards",
+    "OT-ready",
+    "Architecture"
+  ],
+  "year": 2021,
+  "yearIsEstimate": false,
+  "emoji": "🕹️",
+  "valueEstimate": {
+    "unit": "total",
+    "label": "Project Scale",
+    "usdLow": 100000,
+    "usdHigh": 999999,
+    "note": "Derived from '6-figure+' label (100,000–999,999)."
+  }
+}

@@ -4,10 +4,25 @@
   "category": "Category Name",
   "icon": "Clock",
   "color": "#00d4ff",
+  "year": 2026,
+  "youtubeUrl": "https://www.youtube.com/watch?v=dQw4w9WgXcQ",
   "problem": "What problem did this project solve?",
   "solution": "How did you solve it?",
   "benefit": "What was the outcome or benefit?",
   "monetaryValue": "150,000",
   "monetaryWord": "Savings",
-  "tags": ["Tag1", "Tag2", "Tag3"]
+  "tags": [
+    "Tag1",
+    "Tag2",
+    "Tag3"
+  ],
+  "yearIsEstimate": false,
+  "emoji": "🛰️",
+  "valueEstimate": {
+    "usdLow": 150000,
+    "usdHigh": 150000,
+    "unit": "total",
+    "label": "Savings",
+    "note": null
+  }
 }

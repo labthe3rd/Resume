@@ -1,0 +1,29 @@
+{
+  "title": "Avon Helmet Felt Infusion Stations Electrical Design",
+  "company": "Avon Protection",
+  "category": "Electrical Design",
+  "icon": "Zap",
+  "color": "#f97316",
+  "problem": "Needed a clear, standards-based electrical architecture to support reliable automation delivery and maintainability.",
+  "solution": "Produced production-ready electrical design packages (power distribution, safety, I/O, and documentation) aligned to shop and site standards.",
+  "benefit": "Reduced commissioning friction and enabled faster, cleaner handoff to plant maintenance and operations.",
+  "monetaryValue": "6-figure+",
+  "monetaryWord": "Project Scale",
+  "tags": [
+    "2023",
+    "Uptime",
+    "Standards",
+    "OT-ready",
+    "Architecture"
+  ],
+  "year": 2023,
+  "yearIsEstimate": false,
+  "emoji": "🎛️",
+  "valueEstimate": {
+    "unit": "total",
+    "label": "Project Scale",
+    "usdLow": 100000,
+    "usdHigh": 999999,
+    "note": "Derived from '6-figure+' label (100,000–999,999)."
+  }
+}

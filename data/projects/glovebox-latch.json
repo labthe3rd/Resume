@@ -10,8 +10,19 @@
   "monetaryValue": "550,000",
   "monetaryWord": "Impact",
   "tags": [
+    "2022",
     "Autonomous",
     "Automotive",
     "PLC Programming"
-  ]
+  ],
+  "year": 2022,
+  "yearIsEstimate": true,
+  "emoji": "🧱",
+  "valueEstimate": {
+    "unit": "total",
+    "label": "Impact",
+    "usdLow": 550000,
+    "usdHigh": 550000,
+    "note": null
+  }
 }

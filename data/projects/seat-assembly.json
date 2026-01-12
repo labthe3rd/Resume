@@ -10,8 +10,19 @@
   "monetaryValue": "400,000",
   "monetaryWord": "Project",
   "tags": [
+    "2017",
     "FAT",
     "Autonomous",
     "Assembly"
-  ]
+  ],
+  "year": 2017,
+  "yearIsEstimate": true,
+  "emoji": "🧮",
+  "valueEstimate": {
+    "unit": "total",
+    "label": "Project",
+    "usdLow": 400000,
+    "usdHigh": 400000,
+    "note": null
+  }
 }

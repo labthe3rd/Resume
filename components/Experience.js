@@ -1,9 +1,30 @@
+// file: Experience.js
 'use client'
 
 import { motion } from 'framer-motion'
 import { useInView } from 'framer-motion'
 import { useRef, useState, useEffect } from 'react'
 import { MapPin, Calendar } from 'lucide-react'
+
+function parseExperienceSortKey(period) {
+  if (typeof period !== 'string') return { end: 0, start: 0 }
+
+  const hasPresent = /\b(present|current)\b/i.test(period)
+  const years = period.match(/\b(19|20)\d{2}\b/g) || []
+  const start = years[0] ? Number(years[0]) : 0
+  const end = hasPresent ? 9999 : (years[1] ? Number(years[1]) : (years[0] ? Number(years[0]) : 0))
+
+  return { end, start }
+}
+
+function sortExperiencesByPeriodDesc(a, b) {
+  const ka = parseExperienceSortKey(a?.period)
+  const kb = parseExperienceSortKey(b?.period)
+
+  if (kb.end !== ka.end) return kb.end - ka.end
+  if (kb.start !== ka.start) return kb.start - ka.start
+  return String(a?.company || '').localeCompare(String(b?.company || ''))
+}
 
 export default function Experience() {
   const ref = useRef(null)
@@ -15,7 +36,7 @@ export default function Experience() {
     fetch('/api/experience')
       .then(res => res.json())
       .then(data => {
-        setExperiences(data.experiences)
+        setExperiences((data.experiences || []).slice().sort(sortExperiencesByPeriodDesc))
         setLoading(false)
       })
       .catch(err => {

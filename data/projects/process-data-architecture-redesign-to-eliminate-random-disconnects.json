@@ -10,8 +10,19 @@
   "monetaryValue": "180,000",
   "monetaryWord": "Recovered Throughput",
   "tags": [
+    "2024",
     "Architecture",
     "Uptime",
     "Automation"
-  ]
+  ],
+  "year": 2024,
+  "yearIsEstimate": true,
+  "emoji": "🧻",
+  "valueEstimate": {
+    "unit": "total",
+    "label": "Recovered Throughput",
+    "usdLow": 180000,
+    "usdHigh": 180000,
+    "note": null
+  }
 }

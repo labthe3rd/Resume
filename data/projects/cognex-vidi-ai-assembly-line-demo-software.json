@@ -1,0 +1,31 @@
+{
+  "title": "Cognex Vidi AI Assembly Line Demo Software",
+  "company": "Cognex",
+  "category": "Vision & AI",
+  "icon": "Eye",
+  "color": "#10b981",
+  "problem": "Needed automated inspection/verification to catch quality issues early without slowing production.",
+  "solution": "Integrated vision/AI inspection (camera + PLC/HMI workflows) with deterministic pass/fail handling and traceable results.",
+  "benefit": "Reduced escape risk and improved confidence in first-pass yield through automated, consistent checks.",
+  "monetaryValue": "6-figure+",
+  "monetaryWord": "Project Scale",
+  "tags": [
+    "2020",
+    "Assembly",
+    "Cognex",
+    "Uptime",
+    "Standards",
+    "OT-ready",
+    "Architecture"
+  ],
+  "year": 2020,
+  "yearIsEstimate": false,
+  "emoji": "📈",
+  "valueEstimate": {
+    "unit": "total",
+    "label": "Project Scale",
+    "usdLow": 100000,
+    "usdHigh": 999999,
+    "note": "Derived from '6-figure+' label (100,000–999,999)."
+  }
+}

@@ -1,0 +1,31 @@
+{
+  "title": "Delirium Virtual Reality Muisc Venue Software/Design",
+  "company": "Delirium VR",
+  "category": "Digital Products",
+  "icon": "Cpu",
+  "color": "#a855f7",
+  "year": 2023,
+  "youtubeUrl": "https://youtu.be/EzIdEcaJgFQ",
+  "problem": "Needed a scalable digital experience that could support live events, monetization, and community operations.",
+  "solution": "Built and shipped VR-focused software/assets with an emphasis on performance, reliability, and creator-friendly deployment.",
+  "benefit": "Enabled repeatable event delivery and revenue-ready experiences with a maintainable content pipeline.",
+  "monetaryValue": null,
+  "monetaryWord": "Business Impact",
+  "tags": [
+    "2023",
+    "VR",
+    "Product",
+    "OT-ready",
+    "Architecture"
+  ],
+  "yearIsEstimate": false,
+  "emoji": "🗺️",
+  "valueEstimate": {
+    "unit": "total",
+    "label": "Business Impact",
+    "usdLow": null,
+    "usdHigh": null,
+    "note": "No numeric value in project data; add an estimate if you want one shown."
+  },
+  "valueEstimateNeedsInput": true
+}

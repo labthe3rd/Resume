@@ -7,7 +7,6 @@
     "Ignition Perspective",
     "OSIsoft PI",
     "Network Segmentation",
-    "OT DMZ Design",
     "VLANs",
     "Switching & Routing",
     "TCP/IP",
@@ -23,7 +22,6 @@
     "Wireshark / Packet Capture",
     "Multicast (IGMP Snooping)",
     "Active Directory",
-    "EtherNet/IP",
-    "CAN bus"
+    "EtherNet/IP"
   ]
 }

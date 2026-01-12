@@ -1,0 +1,32 @@
+{
+  "title": "Welding System Assembly Management",
+  "company": "Manufacturing Systems",
+  "category": "Controls Governance",
+  "icon": "Castle",
+  "color": "#3b82f6",
+  "problem": "Inconsistent standards and fragmented tooling increased rework, version drift, and long-term support cost.",
+  "solution": "Established repeatable engineering standards and workflows to improve documentation quality and enforce consistency across deliverables.",
+  "benefit": "Lowered lifecycle support burden and enabled faster onboarding and cross-team collaboration.",
+  "monetaryValue": null,
+  "monetaryWord": "Risk Reduction",
+  "tags": [
+    "2018",
+    "Assembly",
+    "Welding",
+    "Uptime",
+    "Standards",
+    "Governance",
+    "Architecture"
+  ],
+  "year": 2018,
+  "yearIsEstimate": false,
+  "emoji": "🧊",
+  "valueEstimate": {
+    "unit": "total",
+    "label": "Risk Reduction",
+    "usdLow": null,
+    "usdHigh": null,
+    "note": "No numeric value in project data; add an estimate if you want one shown."
+  },
+  "valueEstimateNeedsInput": true
+}

@@ -10,8 +10,19 @@
   "monetaryValue": "300,000",
   "monetaryWord": "Avoided Downtime",
   "tags": [
+    "2024",
     "Controls",
     "Firmware",
     "Reliability"
-  ]
+  ],
+  "year": 2024,
+  "yearIsEstimate": true,
+  "emoji": "🔒",
+  "valueEstimate": {
+    "unit": "total",
+    "label": "Avoided Downtime",
+    "usdLow": 300000,
+    "usdHigh": 300000,
+    "note": null
+  }
 }

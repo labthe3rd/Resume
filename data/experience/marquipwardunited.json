@@ -1,0 +1,15 @@
+{
+  "company": "MarquipWardUnited",
+  "role": "R&D Associate Controls Engineer",
+  "period": "May 2015 - Dec 2016",
+  "location": "Phillips WI, US",
+  "description": "Developed and deployed industrial automation solutions with an emphasis on reliability, standardization, and clean handoff to operations and maintenance.",
+  "highlights": [
+    "Delivered PLC/HMI control solutions with robust fault handling and maintainable patterns",
+    "Created standards-oriented documentation packages to reduce rework and lifecycle support cost",
+    "Supported commissioning and troubleshooting at customer facilities with a downtime-minimizing mindset",
+    "Partnered across engineering disciplines to align electrical design, controls software, and operations requirements",
+    "Introduced repeatable governance habits (version control, structured change tracking, and validation checkpoints)"
+  ],
+  "color": "#3b82f6"
+}

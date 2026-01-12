@@ -1,3 +1,4 @@
+// file: Projects.js
 'use client'
 
 import { motion } from 'framer-motion'
@@ -17,6 +18,66 @@ const iconMap = {
   Castle
 }
 
+// Optional project fields supported by this component:
+// - year: number (used for sorting)
+// - date: string (any string containing a 4-digit year, used for sorting)
+// - youtubeUrl/youtube/videoUrl/video: string (YouTube URL or 11-char video ID)
+function toYouTubeEmbedUrl(input) {
+  if (!input || typeof input !== 'string') return null
+  const raw = input.trim()
+  if (!raw) return null
+
+  // Allow either a raw video ID or a URL.
+  // ID: 11 chars, letters/numbers/_/-
+  if (/^[A-Za-z0-9_-]{11}$/.test(raw)) {
+    return `https://www.youtube-nocookie.com/embed/${raw}`
+  }
+
+  try {
+    const url = new URL(raw)
+
+    // youtu.be/<id>
+    if (url.hostname === 'youtu.be') {
+      const id = url.pathname.replace(/^\//, '').slice(0, 11)
+      if (/^[A-Za-z0-9_-]{11}$/.test(id)) return `https://www.youtube-nocookie.com/embed/${id}`
+    }
+
+    // youtube.com/watch?v=<id>
+    if (url.searchParams.has('v')) {
+      const id = url.searchParams.get('v')?.slice(0, 11)
+      if (id && /^[A-Za-z0-9_-]{11}$/.test(id)) return `https://www.youtube-nocookie.com/embed/${id}`
+    }
+
+    // youtube.com/embed/<id>
+    const match = url.pathname.match(/\/embed\/([A-Za-z0-9_-]{11})/)
+    if (match?.[1]) return `https://www.youtube-nocookie.com/embed/${match[1]}`
+  } catch {
+    // ignore
+  }
+
+  return null
+}
+
+function projectYearKey(project) {
+  const direct = Number(project?.year)
+  if (Number.isFinite(direct)) return direct
+
+  const dateStr = typeof project?.date === 'string' ? project.date : null
+  if (dateStr) {
+    const m = dateStr.match(/\b(19|20)\d{2}\b/)
+    if (m) return Number(m[0])
+  }
+
+  return 0
+}
+
+function sortProjectsByYearDesc(a, b) {
+  const ya = projectYearKey(a)
+  const yb = projectYearKey(b)
+  if (yb !== ya) return yb - ya
+  return String(a?.title || '').localeCompare(String(b?.title || ''))
+}
+
 export default function Projects() {
   const ref = useRef(null)
   const isInView = useInView(ref, { once: true, margin: '-100px' })
@@ -30,10 +91,10 @@ export default function Projects() {
     fetch('/api/projects')
       .then(res => res.json())
       .then(data => {
-        const projectsWithIcons = data.projects.map(project => ({
+        const projectsWithIcons = (data.projects || []).map(project => ({
           ...project,
           icon: iconMap[project.iconName] || Clock
-        }))
+        })).sort(sortProjectsByYearDesc)
         setProjects(projectsWithIcons)
         setProjectCategories(data.categories)
         setLoading(false)
@@ -118,7 +179,10 @@ export default function Projects() {
             className="bento-grid"
             style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(350px, 1fr))' }}
           >
-            {filteredProjects.map((project, index) => (
+            {filteredProjects.map((project, index) => {
+              const youtubeEmbedUrl = toYouTubeEmbedUrl(project.youtubeUrl ?? project.youtube ?? project.videoUrl ?? project.video)
+
+              return (
               <motion.div
                 key={project.title}
                 layout
@@ -248,6 +312,45 @@ export default function Projects() {
                         {project.benefit}
                       </p>
                     </div>
+
+                    {youtubeEmbedUrl && (
+                      <div style={{ marginTop: '1.25rem' }} onClick={(e) => e.stopPropagation()}>
+                        <div style={{
+                          fontSize: '0.75rem',
+                          color: 'var(--text-tertiary)',
+                          textTransform: 'uppercase',
+                          letterSpacing: '0.1em',
+                          marginBottom: '0.5rem'
+                        }}>
+                          Demo
+                        </div>
+
+                        <div style={{
+                          position: 'relative',
+                          width: '100%',
+                          paddingTop: '56.25%',
+                          borderRadius: 12,
+                          overflow: 'hidden',
+                          border: '1px solid var(--glass-border)',
+                          background: 'var(--glass-bg)'
+                        }}>
+                          <iframe
+                            src={`${youtubeEmbedUrl}?rel=0&modestbranding=1&playsinline=1`}
+                            title={`${project.title} video`}
+                            loading="lazy"
+                            allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+                            allowFullScreen
+                            style={{
+                              position: 'absolute',
+                              inset: 0,
+                              width: '100%',
+                              height: '100%',
+                              border: 0
+                            }}
+                          />
+                        </div>
+                      </div>
+                    )}
                   </div>
                 </motion.div>
 
@@ -283,7 +386,8 @@ export default function Projects() {
                   {expandedProject === project.title ? 'Click to collapse' : 'Click to expand'}
                 </div>
               </motion.div>
-            ))}
+            )
+            })}
           </motion.div>
         )}
       </div>

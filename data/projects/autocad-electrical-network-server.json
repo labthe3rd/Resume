@@ -1,0 +1,32 @@
+{
+  "title": "AutoCAD Electrical Network Server",
+  "company": "Engineering Standards",
+  "category": "Controls Governance",
+  "icon": "Castle",
+  "color": "#3b82f6",
+  "problem": "Inconsistent standards and fragmented tooling increased rework, version drift, and long-term support cost.",
+  "solution": "Established repeatable engineering standards and workflows to improve documentation quality and enforce consistency across deliverables.",
+  "benefit": "Lowered lifecycle support burden and enabled faster onboarding and cross-team collaboration.",
+  "monetaryValue": null,
+  "monetaryWord": "Risk Reduction",
+  "tags": [
+    "2019",
+    "AutoCAD Electrical",
+    "Standards",
+    "Uptime",
+    "Governance",
+    "OT-ready",
+    "Architecture"
+  ],
+  "year": 2019,
+  "yearIsEstimate": false,
+  "emoji": "🛰️",
+  "valueEstimate": {
+    "unit": "total",
+    "label": "Risk Reduction",
+    "usdLow": null,
+    "usdHigh": null,
+    "note": "No numeric value in project data; add an estimate if you want one shown."
+  },
+  "valueEstimateNeedsInput": true
+}

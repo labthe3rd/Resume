@@ -57,3 +57,12 @@ Simply delete the JSON file from `/data/projects/`
 - Projects are displayed in alphabetical order by filename
 - Changes require a server restart in development mode
 - In production (Vercel), changes will take effect on the next deployment
+
+
+## Additional Fields
+Projects now support:
+- `year` (number)
+- `yearIsEstimate` (boolean)
+- `emoji` (string)
+- `valueEstimate` (object)
+- `youtubeUrl` (optional string)

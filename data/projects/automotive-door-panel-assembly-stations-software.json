@@ -1,0 +1,31 @@
+{
+  "title": "Automotive Door Panel Assembly Stations Software",
+  "company": "Automotive Manufacturing",
+  "category": "Controls Delivery",
+  "icon": "Wrench",
+  "color": "#00d4ff",
+  "problem": "Required reliable PLC/HMI control software for automated manufacturing equipment with clear fault handling and safe operation.",
+  "solution": "Delivered controls software, commissioning support, and operator-friendly interfaces with an emphasis on robustness and maintainable patterns.",
+  "benefit": "Achieved stable production behavior with faster troubleshooting and smoother handoff to operations.",
+  "monetaryValue": "6-figure+",
+  "monetaryWord": "Project Scale",
+  "tags": [
+    "2020",
+    "Automotive",
+    "Assembly",
+    "Uptime",
+    "Standards",
+    "OT-ready",
+    "Architecture"
+  ],
+  "year": 2020,
+  "yearIsEstimate": false,
+  "emoji": "⚙️",
+  "valueEstimate": {
+    "unit": "total",
+    "label": "Project Scale",
+    "usdLow": 100000,
+    "usdHigh": 999999,
+    "note": "Derived from '6-figure+' label (100,000–999,999)."
+  }
+}

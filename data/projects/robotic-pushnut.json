@@ -10,8 +10,19 @@
   "monetaryValue": "350,000",
   "monetaryWord": "Project",
   "tags": [
+    "2017",
     "Robotics",
     "Automotive",
     "Assembly Line"
-  ]
+  ],
+  "year": 2017,
+  "yearIsEstimate": true,
+  "emoji": "🪪",
+  "valueEstimate": {
+    "unit": "total",
+    "label": "Project",
+    "usdLow": 350000,
+    "usdHigh": 350000,
+    "note": null
+  }
 }

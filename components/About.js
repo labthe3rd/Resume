@@ -67,7 +67,7 @@ export default function About() {
             }}>
               In the Grand Rapids industrial hub, I specialize in high-speed Food/CPG and 
               Automotive assembly, delivering "Secure-by-Design" automation that prioritizes 
-              both safety and multi-million dollar ROI. Open to relocation to support the evolution of Food/CPG and Automotive manufacturing hubs.
+              both safety and multi-million dollar ROI. I am always open to relocation to support the evolution of Food/CPG and Automotive manufacturing hubs.
             </p>
 
             <div className="glass-card" style={{

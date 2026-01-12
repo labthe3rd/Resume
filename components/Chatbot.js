@@ -14,6 +14,7 @@ export default function Chatbot() {
   ])
   const [input, setInput] = useState('')
   const [isLoading, setIsLoading] = useState(false)
+  const [conversationHistory, setConversationHistory] = useState([])
   const messagesEndRef = useRef(null)
 
   const scrollToBottom = () => {
@@ -24,26 +25,55 @@ export default function Chatbot() {
     scrollToBottom()
   }, [messages])
 
+  // Track connection for resource management
+  useEffect(() => {
+    if (isOpen) {
+      // Notify backend that chatbot is active
+      fetch('/api/portfolio/health').catch(() => {})
+    }
+  }, [isOpen])
+
   const handleSubmit = async (e) => {
     e.preventDefault()
     if (!input.trim() || isLoading) return
 
     const userMessage = input.trim()
     setInput('')
-    setMessages(prev => [...prev, { role: 'user', content: userMessage }])
+    
+    // Add user message to UI
+    const newMessages = [...messages, { role: 'user', content: userMessage }]
+    setMessages(newMessages)
+    
+    // Add to conversation history (for context)
+    const newHistory = [...conversationHistory, { role: 'user', content: userMessage }]
+    setConversationHistory(newHistory)
+    
     setIsLoading(true)
 
     try {
       const response = await fetch('/api/chat', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ message: userMessage })
+        body: JSON.stringify({ 
+          message: userMessage,
+          history: newHistory.slice(-10) // Send last 10 messages for context
+        })
       })
 
       const data = await response.json()
 
-      if (response.ok) {
-        setMessages(prev => [...prev, { role: 'assistant', content: data.response }])
+      if (response.ok && data.response) {
+        // Add assistant response to UI
+        setMessages(prev => [...prev, { 
+          role: 'assistant', 
+          content: data.response 
+        }])
+        
+        // Add to conversation history
+        setConversationHistory(prev => [...prev, {
+          role: 'assistant',
+          content: data.response
+        }])
       } else {
         setMessages(prev => [...prev, { 
           role: 'assistant', 
@@ -51,6 +81,7 @@ export default function Chatbot() {
         }])
       }
     } catch (error) {
+      console.error('Chat error:', error)
       setMessages(prev => [...prev, { 
         role: 'assistant', 
         content: 'Sorry, I could not connect. Please try again later.' 
@@ -58,6 +89,20 @@ export default function Chatbot() {
     } finally {
       setIsLoading(false)
     }
+  }
+
+  const handleClose = () => {
+    setIsOpen(false)
+  }
+
+  const handleClearHistory = () => {
+    setMessages([
+      {
+        role: 'assistant',
+        content: "Hi! I'm Louis's AI assistant. Ask me anything about his experience, skills, or projects!"
+      }
+    ])
+    setConversationHistory([])
   }
 
   return (
@@ -140,24 +185,44 @@ export default function Chatbot() {
                 <div>
                   <div style={{ fontWeight: 600, fontSize: '0.9rem' }}>Louis's Assistant</div>
                   <div style={{ fontSize: '0.75rem', color: 'rgba(255,255,255,0.5)' }}>
-                    Powered by AI
+                    Local AI • RAG Powered
                   </div>
                 </div>
               </div>
-              <motion.button
-                onClick={() => setIsOpen(false)}
-                whileHover={{ scale: 1.1 }}
-                whileTap={{ scale: 0.9 }}
-                style={{
-                  background: 'none',
-                  border: 'none',
-                  color: 'rgba(255,255,255,0.6)',
-                  cursor: 'pointer',
-                  padding: '0.5rem'
-                }}
-              >
-                <X size={20} />
-              </motion.button>
+              <div style={{ display: 'flex', gap: '0.5rem' }}>
+                {messages.length > 1 && (
+                  <motion.button
+                    onClick={handleClearHistory}
+                    whileHover={{ scale: 1.1 }}
+                    whileTap={{ scale: 0.9 }}
+                    title="Clear conversation"
+                    style={{
+                      background: 'none',
+                      border: 'none',
+                      color: 'rgba(255,255,255,0.4)',
+                      cursor: 'pointer',
+                      padding: '0.5rem',
+                      fontSize: '0.75rem'
+                    }}
+                  >
+                    Clear
+                  </motion.button>
+                )}
+                <motion.button
+                  onClick={handleClose}
+                  whileHover={{ scale: 1.1 }}
+                  whileTap={{ scale: 0.9 }}
+                  style={{
+                    background: 'none',
+                    border: 'none',
+                    color: 'rgba(255,255,255,0.6)',
+                    cursor: 'pointer',
+                    padding: '0.5rem'
+                  }}
+                >
+                  <X size={20} />
+                </motion.button>
+              </div>
             </div>
 
             {/* Messages */}

@@ -10,8 +10,19 @@
   "monetaryValue": "270,000",
   "monetaryWord": "Savings",
   "tags": [
+    "2025",
     "ROI Optimization",
     "Guard Link",
     "Functional Safety"
-  ]
+  ],
+  "year": 2025,
+  "yearIsEstimate": true,
+  "emoji": "🧭",
+  "valueEstimate": {
+    "unit": "total",
+    "label": "Savings",
+    "usdLow": 270000,
+    "usdHigh": 270000,
+    "note": null
+  }
 }

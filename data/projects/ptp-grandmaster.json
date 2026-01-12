@@ -9,5 +9,26 @@
   "benefit": "Executed a definitive 8-hour recovery where industry averages for such \"ghost\" timing errors exceed 48 hours—saving an estimated $5M+ in potential downtime and lost product.",
   "monetaryValue": "350,000/hr",
   "monetaryWord": "Loss Prevented",
-  "tags": ["Precision Time Protocol", "PTP/BMCA", "Digital Forensics", "Network Hardening"]
+  "tags": [
+    "2025",
+    "Precision Time Protocol",
+    "PTP/BMCA",
+    "Digital Forensics",
+    "Network Hardening"
+  ],
+  "year": 2025,
+  "yearIsEstimate": true,
+  "emoji": "🗄️",
+  "valueEstimate": {
+    "unit": "per_hour",
+    "label": "Loss Prevented",
+    "usdLow": 350000,
+    "usdHigh": 450000,
+    "note": null,
+    "usdTotalLow": 2800000,
+    "usdTotalHigh": 5000000,
+    "totalUnit": "total",
+    "totalNote": "Derived from 8 hours mentioned in text.",
+    "totalNote2": "Text also referenced ~$5.0M+."
+  }
 }
