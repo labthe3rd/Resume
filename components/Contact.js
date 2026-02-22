@@ -50,28 +50,28 @@ export default function Contact() {
       label: 'Email',
       value: 'Labthe3rd@gmail.com',
       href: 'mailto:Labthe3rd@gmail.com',
-      color: '#00d4ff'
+      color: 'var(--accent-primary)'
     },
     {
       icon: Linkedin,
       label: 'LinkedIn',
       value: 'louis-bersine-iii',
       href: 'https://www.linkedin.com/in/louis-bersine-iii',
-      color: '#0077b5'
+      color: 'var(--accent-primary)'
     },
     {
       icon: Globe,
       label: 'Website',
       value: 'louisbersine.com',
       href: 'https://www.louisbersine.com/',
-      color: '#a855f7'
+      color: 'var(--accent-primary)'
     },
     {
       icon: MapPin,
       label: 'Location',
       value: 'Grand Rapids, MI',
       href: null,
-      color: '#10b981'
+      color: 'var(--accent-primary)'
     }
   ]
 
@@ -104,7 +104,8 @@ export default function Contact() {
       style={{
         padding: '8rem 2rem',
         position: 'relative',
-        background: 'linear-gradient(180deg, transparent 0%, rgba(0, 212, 255, 0.03) 100%)'
+        /* subtle background tint using the primary accent color */
+        background: 'linear-gradient(180deg, transparent 0%, rgba(37, 99, 235, 0.05) 100%)'
       }}
     >
       <div className="container">
@@ -266,7 +267,7 @@ export default function Contact() {
                   required
                   placeholder="Your name"
                   style={inputStyle}
-                  onFocus={(e) => e.target.style.borderColor = '#00d4ff'}
+                  onFocus={(e) => e.target.style.borderColor = 'var(--accent-primary)'}
                   onBlur={(e) => e.target.style.borderColor = 'var(--glass-border)'}
                 />
               </div>
@@ -284,7 +285,7 @@ export default function Contact() {
                   required
                   placeholder="your.email@example.com"
                   style={inputStyle}
-                  onFocus={(e) => e.target.style.borderColor = '#00d4ff'}
+                  onFocus={(e) => e.target.style.borderColor = 'var(--accent-primary)'}
                   onBlur={(e) => e.target.style.borderColor = 'var(--glass-border)'}
                 />
               </div>
@@ -301,7 +302,7 @@ export default function Contact() {
                   onChange={(e) => setFormState({ ...formState, phone: e.target.value })}
                   placeholder="(555) 123-4567"
                   style={inputStyle}
-                  onFocus={(e) => e.target.style.borderColor = '#00d4ff'}
+                  onFocus={(e) => e.target.style.borderColor = 'var(--accent-primary)'}
                   onBlur={(e) => e.target.style.borderColor = 'var(--glass-border)'}
                 />
               </div>
@@ -321,7 +322,7 @@ export default function Contact() {
                     ...inputStyle,
                     resize: 'vertical'
                   }}
-                  onFocus={(e) => e.target.style.borderColor = '#00d4ff'}
+                  onFocus={(e) => e.target.style.borderColor = 'var(--accent-primary)'}
                   onBlur={(e) => e.target.style.borderColor = 'var(--glass-border)'}
                 />
               </div>

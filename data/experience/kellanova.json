@@ -3,12 +3,12 @@
   "role": "Controls Engineer & OT Network Manager",
   "period": "Dec 2023 - Present",
   "location": "Grand Rapids, MI",
-  "description": "OT escalation lead for network and automation incidents; architected and enforced cyber‑aligned governance across brownfield OT networks; ensured deterministic CIP Sync/PTP timing and high‑availability Rockwell platforms; led disaster recovery standardization.",
+  "description": "Resolved a CIP Sync/PTP grandmaster conflict impacting the motion layer, restoring deterministic plant‑wide timing in ~6 hours and mitigating ~$3,500/hr downtime exposure. Implemented PLC change tracking, automated backups and OPC restoration across undocumented servers to avoid $40,000–$80,000 in external recovery costs. Delivered a GuardLink safety upgrade using existing infrastructure, avoiding ~$170,000 capital versus a $200,000 proposal. Standardized virtualized Rockwell toolchains and reproducible engineering baselines, saving ~$1,400 per workstation. Partnered with IT to segment access, automate backups and integrate domain logins; stabilized legacy industrial Ethernet (VLANs, IGMP, CIP/IEEE‑1588) and led OT escalation for network and automation incidents.",
   "highlights": [
-    "Brownfield OT network stabilization",
-    "Cyber‑aligned governance & segmentation",
-    "Deterministic CIP Sync/PTP recovery",
-    "High‑availability Rockwell platforms & disaster recovery"
+    "Restored plant‑wide deterministic PTP timing (~$3.5K/hr downtime mitigated)",
+    "Automated backups & OPC recovery (avoided $40K–$80K costs)",
+    "GuardLink upgrade (avoided ~$170K capital)",
+    "Standardized virtualized toolchains (saved ~$1.4K per workstation)"
   ],
-  "color": "#00d4ff"
+  "color": "#2563EB"
 }

@@ -116,7 +116,8 @@ export default function Projects() {
       style={{
         padding: '8rem 2rem',
         position: 'relative',
-        background: 'linear-gradient(180deg, transparent 0%, rgba(168, 85, 247, 0.02) 50%, transparent 100%)'
+        /* subtle background tint using the primary accent color for cohesion */
+        background: 'linear-gradient(180deg, transparent 0%, rgba(37, 99, 235, 0.05) 50%, transparent 100%)'
       }}
     >
       <div className="container">
@@ -152,7 +153,7 @@ export default function Projects() {
               style={{
                 padding: '0.75rem 1.5rem',
                 background: activeCategory === category
-                  ? 'linear-gradient(135deg, #00d4ff 0%, #a855f7 100%)'
+                  ? 'var(--gradient-2)'
                   : 'var(--glass-bg)',
                 border: `1px solid ${activeCategory === category ? 'transparent' : 'var(--glass-border)'}`,
                 borderRadius: '100px',

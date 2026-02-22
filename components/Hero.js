@@ -27,7 +27,7 @@ export default function Hero() {
             className="mono"
             style={{
               fontSize: '0.875rem',
-              color: 'var(--accent-cyan)',
+              color: 'var(--accent-primary)',
               letterSpacing: '0.3em',
               textTransform: 'uppercase',
               display: 'block',
@@ -133,7 +133,7 @@ export default function Hero() {
             href="https://www.linkedin.com/in/louis-bersine-iii"
             target="_blank"
             rel="noopener noreferrer"
-            whileHover={{ scale: 1.1, color: '#00d4ff' }}
+            whileHover={{ scale: 1.1, color: 'var(--accent-primary)' }}
             style={{
               color: 'var(--text-tertiary)',
               transition: 'color 0.3s ease'
@@ -145,7 +145,7 @@ export default function Hero() {
             href="https://www.louisbersine.com/"
             target="_blank"
             rel="noopener noreferrer"
-            whileHover={{ scale: 1.1, color: '#00d4ff' }}
+            whileHover={{ scale: 1.1, color: 'var(--accent-primary)' }}
             style={{
               color: 'var(--text-tertiary)',
               transition: 'color 0.3s ease'
@@ -159,7 +159,7 @@ export default function Hero() {
               e.preventDefault()
               document.getElementById('contact')?.scrollIntoView({ behavior: 'smooth' })
             }}
-            whileHover={{ scale: 1.1, color: '#00d4ff' }}
+            whileHover={{ scale: 1.1, color: 'var(--accent-primary)' }}
             style={{
               color: 'var(--text-tertiary)',
               transition: 'color 0.3s ease',

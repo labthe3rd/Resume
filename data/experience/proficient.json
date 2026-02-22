@@ -3,12 +3,12 @@
   "role": "Controls Engineer",
   "period": "Sep 2019 - Sep 2023",
   "location": "Byron Center, MI",
-  "description": "Architected electrical designs, PLC software and commissioning across multiple industries; standardized control patterns and documentation to institutionalize reliability and maintainability; delivered OT solutions at enterprise scale.",
+  "description": "Led migration from SolidWorks to AutoCAD Electrical, standardizing symbols, PLC modules, title blocks and wire‑numbering macros; protected $3M–$8M in annual automation revenue. Built a VBA‑based HMI platform that replaced licensed third‑party visualization, saving $15K–$40K per deployment. Created an Excel‑driven PLC tag auto‑generation system for badge access, reducing commissioning labour and protecting $20K–$50K across deployments. Designed hardened Raspberry Pi remote access with certificate‑based authentication and engineered PLC/HMI/robotic automation software for deterministic motion control and throughput stability.",
   "highlights": [
-    "Electrical & PLC architecture",
-    "Standardized patterns & documentation",
-    "Commissioning across industries",
-    "Reliability & maintainability"
+    "Migrated to AutoCAD Electrical & standardized libraries ($3M–$8M revenue protected)",
+    "Built custom HMI platform (saved $15K–$40K per deployment)",
+    "Automated PLC tag generation & reduced commissioning labour ($20K–$50K saved)",
+    "Hardened remote access & deterministic automation"
   ],
-  "color": "#a855f7"
+  "color": "#2563EB"
 }

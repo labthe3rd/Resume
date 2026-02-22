@@ -70,7 +70,7 @@ export default function Navigation({ activeSection }) {
               fontFamily: 'Syne, sans-serif',
               fontSize: '1.5rem',
               fontWeight: 800,
-              background: 'linear-gradient(135deg, #00d4ff 0%, #a855f7 100%)',
+              background: 'var(--gradient-1)',
               WebkitBackgroundClip: 'text',
               WebkitTextFillColor: 'transparent',
               backgroundClip: 'text',
@@ -94,7 +94,7 @@ export default function Navigation({ activeSection }) {
                   style={{
                     background: 'none',
                     border: 'none',
-                    color: activeSection === item.id ? '#00d4ff' : 'rgba(255, 255, 255, 0.7)',
+                    color: activeSection === item.id ? 'var(--accent-primary)' : 'var(--text-secondary)',
                     fontSize: '0.875rem',
                     fontWeight: 500,
                     cursor: 'pointer',
@@ -113,7 +113,7 @@ export default function Navigation({ activeSection }) {
                         left: 0,
                         right: 0,
                         height: 2,
-                        background: '#00d4ff',
+                        background: 'var(--accent-primary)',
                         borderRadius: 2
                       }}
                     />
@@ -193,7 +193,7 @@ export default function Navigation({ activeSection }) {
                   style={{
                     background: 'none',
                     border: 'none',
-                    color: activeSection === item.id ? '#00d4ff' : 'white',
+                    color: activeSection === item.id ? 'var(--accent-primary)' : 'var(--text-primary)',
                     fontSize: '1.5rem',
                     fontWeight: 600,
                     cursor: 'pointer',

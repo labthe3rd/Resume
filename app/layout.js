@@ -1,16 +1,20 @@
-// file: ./app/layout.js
+// file: ./app/layout.js (modified)
+// Updated metadata to reflect your authority as an OT Infrastructure & Controls Architect
+// and align with the streamlined, modern design. Includes the noise and gradient blobs
+// defined in globals.css for subtle depth effects.
+
 import './globals.css'
 import Providers from './providers'
 
 export const metadata = {
-  title: 'Louis Bersine | Controls & OT Expert',
+  title: 'Louis Bersine | OT Infrastructure & Controls Architect',
   description:
-    'Controls Engineer & OT Security Specialist with a decade of experience in industrial automation, PLC programming, and OT network administration.',
-  keywords: 'Controls Engineer, OT Security, PLC Programming, Industrial Automation, Rockwell, Siemens, SCADA',
+    'OT Infrastructure & Controls Architect specializing in brownfield network stabilization, cyber‑aligned governance and high‑availability manufacturing systems.',
+  keywords: 'OT infrastructure, Controls Architect, industrial automation, OT governance, deterministic control, risk mitigation, Rockwell, SCADA',
   authors: [{ name: 'Louis Bersine' }],
   openGraph: {
-    title: 'Louis Bersine | Controls & OT Expert',
-    description: 'Controls Engineer & OT Security Specialist with a decade of experience',
+    title: 'Louis Bersine | OT Infrastructure & Controls Architect',
+    description: 'Architecting high‑availability OT environments and de‑risking industrial networks.',
     type: 'website',
   },
 }

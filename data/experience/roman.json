@@ -3,12 +3,12 @@
   "role": "Project Engineer",
   "period": "Aug 2018 - Sep 2019",
   "location": "Wyoming, MI",
-  "description": "Directed procurement and execution of custom industrial equipment for a metal‑refining operation. Modernized automation systems with strict safety, reliability and compliance standards. Led on‑site upgrades and technical support, ensuring minimal production disruption and risk mitigation.",
+  "description": "Developed VBA tools leveraging Autodesk Inventor models to automate cable measurement, improving bid accuracy and material planning. Recovered a FANUC CNC system without OEM documentation, eliminating contractor dependency and restoring production stability. Managed $50K–$300K+ per project in parts, services and equipment while modernizing systems to meet machinery safety standards. Worked directly with clients on welding equipment designs valued at $100K–$400K and engineered PLC‑based automation systems in high‑heat refinery environments for reliable temperature acquisition and custom signal integration.",
   "highlights": [
-    "Custom equipment procurement & execution",
-    "Automation modernization & compliance",
-    "On‑site upgrades & support",
-    "Safety, reliability & risk mitigation"
+    "Automated cable measurement & improved bid accuracy",
+    "Recovered FANUC CNC & eliminated contractor dependency",
+    "$50K–$300K+ project management & safety modernization",
+    "Engineered PLC automation in high‑heat refinery environments"
   ],
-  "color": "#10b981"
+  "color": "#2563EB"
 }

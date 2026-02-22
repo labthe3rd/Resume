@@ -35,7 +35,7 @@ export default function Footer() {
               fontFamily: 'Syne, sans-serif',
               fontSize: '2rem',
               fontWeight: 800,
-              background: 'linear-gradient(135deg, #00d4ff 0%, #a855f7 100%)',
+              background: 'var(--gradient-1)',
               WebkitBackgroundClip: 'text',
               WebkitTextFillColor: 'transparent',
               backgroundClip: 'text',
@@ -63,7 +63,7 @@ export default function Footer() {
               href="https://www.linkedin.com/in/louis-bersine-iii"
               target="_blank"
               rel="noopener noreferrer"
-              whileHover={{ scale: 1.2, color: '#00d4ff' }}
+              whileHover={{ scale: 1.2, color: 'var(--accent-primary)' }}
               style={{
                 color: 'var(--text-tertiary)',
                 transition: 'color 0.3s ease'
@@ -75,7 +75,7 @@ export default function Footer() {
               href="https://www.louisbersine.com/"
               target="_blank"
               rel="noopener noreferrer"
-              whileHover={{ scale: 1.2, color: '#00d4ff' }}
+              whileHover={{ scale: 1.2, color: 'var(--accent-primary)' }}
               style={{
                 color: 'var(--text-tertiary)',
                 transition: 'color 0.3s ease'
@@ -85,7 +85,7 @@ export default function Footer() {
             </motion.a>
             <motion.a
               href="mailto:Labthe3rd@gmail.com"
-              whileHover={{ scale: 1.2, color: '#00d4ff' }}
+              whileHover={{ scale: 1.2, color: 'var(--accent-primary)' }}
               style={{
                 color: 'var(--text-tertiary)',
                 transition: 'color 0.3s ease'
@@ -101,16 +101,14 @@ export default function Footer() {
             background: 'var(--glass-border)'
           }} />
 
-          <div style={{
-            display: 'flex',
-            alignItems: 'center',
-            gap: '0.5rem',
-            color: 'var(--text-tertiary)',
-            fontSize: '0.875rem'
-          }}>
-            <span>© {currentYear} Louis Bersine. Built with</span>
-            <Heart size={14} style={{ color: '#ef4444' }} />
-            <span>and Next.js</span>
+          {/* Replace casual “Built with <3 and Next.js” with a professional copyright line */}
+          <div
+            style={{
+              color: 'var(--text-tertiary)',
+              fontSize: '0.875rem'
+            }}
+          >
+            © {currentYear} Louis Bersine. All rights reserved.
           </div>
         </div>
       </div>

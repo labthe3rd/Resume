@@ -44,7 +44,8 @@ export default function Skills() {
       style={{
         padding: '8rem 2rem',
         position: 'relative',
-        background: 'linear-gradient(180deg, transparent 0%, rgba(0, 212, 255, 0.02) 50%, transparent 100%)'
+        /* subtle background tint using the primary accent color */
+        background: 'linear-gradient(180deg, transparent 0%, rgba(37, 99, 235, 0.05) 50%, transparent 100%)'
       }}
     >
       <div className="container">

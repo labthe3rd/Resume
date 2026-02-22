@@ -1,7 +1,7 @@
 {
   "title": "Governance & Disaster Recovery",
   "icon": "Shield",
-  "color": "#a855f7",
+  "color": "#2563EB",
   "skills": [
     "Segmented Access & Jump Hosts",
     "Backup & Restore Architecture",

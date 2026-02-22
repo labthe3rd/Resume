@@ -123,7 +123,7 @@ export default function About() {
                   fontSize: '2.5rem',
                   fontWeight: 800,
                   marginBottom: '0.5rem',
-                  background: 'linear-gradient(135deg, #00d4ff 0%, #a855f7 100%)',
+                  background: 'var(--gradient-1)',
                   WebkitBackgroundClip: 'text',
                   WebkitTextFillColor: 'transparent',
                   backgroundClip: 'text'
