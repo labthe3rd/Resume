@@ -126,9 +126,9 @@ export default function Projects() {
           transition={{ duration: 0.8 }}
           style={{ marginBottom: '3rem' }}
         >
-          <span className="section-subtitle">Portfolio</span>
+          <span className="section-subtitle">Impact</span>
           <h2 className="section-title">
-            Key <span className="gradient-text">Projects</span>
+            Selected <span className="gradient-text">Outcomes</span>
           </h2>
         </motion.div>
 
@@ -224,7 +224,8 @@ export default function Projects() {
                     <project.icon size={24} style={{ color: project.color }} />
                   </div>
 
-                  {project.monetaryValue && (
+                  {/* Display a numeric value range when available via valueEstimate; fall back to monetaryValue */}
+                  {(project.valueEstimate && typeof project.valueEstimate.usdLow === 'number' && typeof project.valueEstimate.usdHigh === 'number') ? (
                     <div style={{
                       display: 'flex',
                       alignItems: 'center',
@@ -238,8 +239,31 @@ export default function Projects() {
                       fontWeight: 600
                     }}>
                       <DollarSign size={14} />
-                      {project.monetaryValue} {project.monetaryWord || 'Impact'}
+                      {(() => {
+                        const fmt = (n) => n.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+                        const low = fmt(project.valueEstimate.usdLow);
+                        const high = fmt(project.valueEstimate.usdHigh);
+                        return `$${low}–$${high}`;
+                      })()} {project.valueEstimate.label || project.monetaryWord || 'Scale'}
                     </div>
+                  ) : (
+                    project.monetaryValue && (
+                      <div style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '0.5rem',
+                        padding: '0.5rem 1rem',
+                        background: '#10b98115',
+                        border: '1px solid #10b98130',
+                        borderRadius: '100px',
+                        color: '#10b981',
+                        fontSize: '0.875rem',
+                        fontWeight: 600
+                      }}>
+                        <DollarSign size={14} />
+                        {project.monetaryValue} {project.monetaryWord || 'Scale'}
+                      </div>
+                    )
                   )}
                 </div>
 
@@ -276,7 +300,7 @@ export default function Projects() {
                         letterSpacing: '0.1em',
                         marginBottom: '0.5rem'
                       }}>
-                        Problem
+                        Challenge
                       </div>
                       <p style={{ color: 'var(--text-secondary)', fontSize: '0.875rem', lineHeight: 1.6 }}>
                         {project.problem}
@@ -291,7 +315,7 @@ export default function Projects() {
                         letterSpacing: '0.1em',
                         marginBottom: '0.5rem'
                       }}>
-                        Solution
+                        Action
                       </div>
                       <p style={{ color: 'var(--text-secondary)', fontSize: '0.875rem', lineHeight: 1.6 }}>
                         {project.solution}
@@ -306,7 +330,7 @@ export default function Projects() {
                         letterSpacing: '0.1em',
                         marginBottom: '0.5rem'
                       }}>
-                        Benefit
+                        Result
                       </div>
                       <p style={{ color: '#10b981', fontSize: '0.875rem', lineHeight: 1.6, fontWeight: 500 }}>
                         {project.benefit}

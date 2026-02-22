@@ -1,4 +1,11 @@
 // file: ./app/page.js  (main page)
+// This version of the home page strips away demo components and weak sections,
+// leaving only the core narrative: hero introduction, about, architecture,
+// scope, outcomes, and contact information. Certification listings and AI/VR
+// demo components have been removed to present a focused, executive-level
+// portfolio.
+
+/* eslint-disable react/no-unescaped-entities */
 'use client'
 
 import { useState, useEffect, useCallback } from 'react'
@@ -8,18 +15,14 @@ import Navigation from '../components/Navigation'
 import Hero from '../components/Hero'
 import About from '../components/About'
 import Skills from '../components/Skills'
-import Certificates from '../components/Certificates'
 import Experience from '../components/Experience'
 import Projects from '../components/Projects'
 import Contact from '../components/Contact'
 import Footer from '../components/Footer'
-import ControlSystem from '../components/ControlSystem'
-import LiquidTankMonitor from '../components/LiquidTankMonitor'
-import Chatbot from '../components/Chatbot'
-import SystemArchitectureMap from '../components/SystemArchitectureMap'
 import PerformanceDebug from '../components/PerformanceDebug'
-import { useWebSocket } from '../contexts/WebSocketContext'
 
+// Dynamically import the 3D scene. This remains to preserve the interactive
+// visual flourish but does not include any control-system demos.
 const Scene3D = dynamic(() => import('../components/Scene3D'), { ssr: false })
 
 const isDevelopment = process.env.NODE_ENV === 'development'
@@ -35,25 +38,20 @@ export default function Home() {
     quality: null,
     lastChange: null
   })
-  const { subscribe } = useWebSocket()
 
-  useEffect(() => {
-    const unsubControl = subscribe('control', () => {})
-    const unsubTank = subscribe('tank', () => {})
-    return () => {
-      unsubControl()
-      unsubTank()
-    }
-  }, [subscribe])
-
+  // Initial loading animation timer
   useEffect(() => {
     const timer = setTimeout(() => setIsLoading(false), 2000)
     return () => clearTimeout(timer)
   }, [])
 
+  // Track which section is active for nav highlighting. Only track the core
+  // sections: hero, about, skills (architecture), experience (scope),
+  // projects (outcomes), and contact. Certification and demo sections were
+  // removed.
   useEffect(() => {
     const handleScroll = () => {
-      const sections = ['hero', 'about', 'skills', 'certifications', 'experience', 'projects', 'tank-monitor', 'control-system', 'contact']
+      const sections = ['hero', 'about', 'skills', 'experience', 'projects', 'contact']
       const scrollPosition = window.scrollY + window.innerHeight / 3
 
       for (const section of sections) {
@@ -72,7 +70,8 @@ export default function Home() {
     return () => window.removeEventListener('scroll', handleScroll)
   }, [])
 
- useEffect(() => {
+  // Development-only: toggle performance debug panel via Ctrl+Shift+D
+  useEffect(() => {
     if (!isDevelopment) return
 
     const handleKeyPress = (e) => {
@@ -85,6 +84,7 @@ export default function Home() {
     return () => window.removeEventListener('keydown', handleKeyPress)
   }, [])
 
+  // Callback to update frame rate and other scene metrics in development
   const handleStatsUpdate = useCallback((stats) => {
     setPerfStats(prev => {
       if (typeof stats === 'function') {
@@ -94,6 +94,7 @@ export default function Home() {
     })
   }, [])
 
+  // Callback to change the tier of the 3D scene (development only)
   const handleSetTier = useCallback((tier) => {
     if (window.__setScene3DTier) {
       window.__setScene3DTier(tier)
@@ -153,12 +154,12 @@ export default function Home() {
         )}
       </AnimatePresence>
 
-  <div className="canvas-container">
+      <div className="canvas-container">
         <Scene3D onStatsUpdate={isDevelopment ? handleStatsUpdate : undefined} />
       </div>
 
       {isDevelopment && showDebug && (
-        <PerformanceDebug 
+        <PerformanceDebug
           stats={perfStats}
           onClose={() => setShowDebug(false)}
           onSetTier={handleSetTier}
@@ -201,17 +202,11 @@ export default function Home() {
         <Hero />
         <About />
         <Skills />
-         <Certificates />
         <Experience />
         <Projects />
-        <SystemArchitectureMap />
-        <LiquidTankMonitor />
-        <ControlSystem />
         <Contact />
         <Footer />
       </main>
-
-      <Chatbot />
     </>
   )
 }

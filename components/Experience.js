@@ -61,9 +61,9 @@ export default function Experience() {
           transition={{ duration: 0.8 }}
           style={{ marginBottom: '4rem' }}
         >
-          <span className="section-subtitle">Career</span>
+          <span className="section-subtitle">Scope</span>
           <h2 className="section-title">
-            Professional <span className="gradient-text">Experience</span>
+            Experience & <span className="gradient-text">Roles</span>
           </h2>
         </motion.div>
 

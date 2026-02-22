@@ -151,9 +151,9 @@ export default function Certificates() {
           transition={{ duration: 0.8 }}
           style={{ marginBottom: '2rem' }}
         >
-          <span className="section-subtitle">Credentials</span>
+          <span className="section-subtitle">Labs & Tools</span>
           <h2 className="section-title">
-            Certifications <span className="gradient-text">That Support the Work</span>
+            Labs & <span className="gradient-text">Tooling</span>
           </h2>
 
           <p style={{
@@ -162,8 +162,9 @@ export default function Certificates() {
             lineHeight: 1.7,
             marginTop: '1rem'
           }}>
-            These are supporting proof-points for software execution: Python, backend APIs, and data/ML literacy—useful
-            when building OT tooling, dashboards, and secure integrations.
+            These labs and tools demonstrate prototypes and skills that enhance reliability, automation and
+            integrations across OT environments. They support my core focus on stable operations and risk
+            reduction.
           </p>
         </motion.div>
 

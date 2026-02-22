@@ -6,10 +6,10 @@ import { useRef } from 'react'
 import { GraduationCap, MapPin, Briefcase, Code } from 'lucide-react'
 
 const stats = [
-  { value: '10+', label: 'Years Experience', icon: Briefcase },
+  { value: '10+', label: 'Years in OT & Controls', icon: Briefcase },
   { value: 'BSEE', label: 'Michigan Tech', icon: GraduationCap },
-  { value: '4', label: 'Industries', icon: MapPin },
-  { value: '20+', label: 'Technologies', icon: Code },
+  { value: '4', label: 'Major Impact Projects', icon: MapPin },
+  { value: '20+', label: 'Protocols & Platforms', icon: Code },
 ]
 
 export default function About() {
@@ -32,9 +32,9 @@ export default function About() {
           transition={{ duration: 0.8 }}
           style={{ marginBottom: '4rem' }}
         >
-          <span className="section-subtitle">About Me</span>
+          <span className="section-subtitle">About</span>
           <h2 className="section-title">
-            Engineering <span className="gradient-text">Excellence</span>
+            Deterministic & Recoverable <span className="gradient-text">Systems</span>
           </h2>
         </motion.div>
 
@@ -55,9 +55,10 @@ export default function About() {
               lineHeight: 1.8,
               marginBottom: '1.5rem'
             }}>
-              A Michigan Tech BSEE graduate, I bridge the gap between <strong>Legacy Controls</strong> 
-              and <strong>Modern IT Infrastructure</strong>. My focus is on Digital Transformation—turning 
-              unreliable plant-floor data into secure, actionable insights. Having managed projects across 4 industries, I am committed to delivering excellence wherever the challenge leads. 
+              I specialize in keeping brownfield manufacturing systems deterministic and recoverable:
+              stable OT networking, resilient Rockwell platforms and governance that holds up under
+              incidents. My work reduces downtime exposure, removes contractor dependency and turns
+              “tribal knowledge” into repeatable operating standards—without breaking production.
             </p>
             <p style={{
               fontSize: '1.125rem',
@@ -65,9 +66,9 @@ export default function About() {
               lineHeight: 1.8,
               marginBottom: '2rem'
             }}>
-              In the Grand Rapids industrial hub, I specialize in high-speed Food/CPG and 
-              Automotive assembly, delivering "Secure-by-Design" automation that prioritizes 
-              both safety and multi-million dollar ROI. I am always open to relocation to support the evolution of Food/CPG and Automotive manufacturing hubs.
+              Based in Grand Rapids, MI, I deliver high‑speed Food/CPG and Automotive assembly
+              operations through stable architectures and measured risk reduction. I’m open to
+              relocation to support reliability across industries.
             </p>
 
             <div className="glass-card" style={{

@@ -3,12 +3,12 @@
   "role": "R&D Associate Controls Engineer",
   "period": "May 2015 - Dec 2016",
   "location": "Phillips WI, US",
-  "description": "Developed and deployed industrial automation solutions with an emphasis on reliability, standardization, and clean handoff to operations and maintenance.",
+  "description": "Developed and deployed industrial automation solutions with robust fault handling and maintainable patterns; established documentation standards to reduce rework and lifecycle support cost; supported commissioning and troubleshooting at customer facilities to minimize downtime; aligned electrical design, controls software and operational requirements across disciplines.",
   "highlights": [
-    "Delivered PLC/HMI control solutions with robust fault handling and maintainable patterns",
-    "Created standards-oriented documentation packages to reduce rework and lifecycle support cost",
-    "Supported commissioning and troubleshooting at customer facilities with a downtime-minimizing mindset",
-    "Partnered across engineering disciplines to align electrical design, controls software, and operations requirements"
+    "Robust controls & fault handling",
+    "Standards‑based documentation",
+    "Downtime‑minimizing commissioning",
+    "Cross‑disciplinary alignment"
   ],
   "color": "#3b82f6"
 }

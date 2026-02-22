@@ -34,7 +34,7 @@ export default function Hero() {
               marginBottom: '1.5rem'
             }}
           >
-            Controls & OT Expert
+            OT Infrastructure & Controls Architect
           </span>
         </motion.div>
 
@@ -72,8 +72,8 @@ export default function Hero() {
             lineHeight: 1.6
           }}
         >
-          A decade of experience transforming industrial operations through 
-          innovative controls engineering, OT security, and intelligent automation solutions.
+          Brownfield OT network stabilization, cyber‑aligned governance, and high‑availability
+          Rockwell control systems—focused on measurable risk reduction and repeatable operations.
         </motion.p>
 
         <motion.div
@@ -98,7 +98,7 @@ export default function Hero() {
             whileTap={{ scale: 0.95 }}
             className="cta-button"
           >
-            View Projects
+            View Selected Outcomes
             <ArrowDown size={18} />
           </motion.a>
 

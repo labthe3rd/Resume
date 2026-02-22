@@ -114,17 +114,18 @@ export default function Contact() {
           transition={{ duration: 0.8 }}
           style={{ textAlign: 'center', marginBottom: '4rem' }}
         >
-          <span className="section-subtitle">Get in Touch</span>
+          {/* Heading updated to avoid casual “Let's connect” phrasing. */}
+          <span className="section-subtitle">Contact</span>
           <h2 className="section-title">
-            Let's <span className="gradient-text">Connect</span>
+            Reduce <span className="gradient-text">Downtime</span>
           </h2>
           <p style={{
             color: 'var(--text-secondary)',
             maxWidth: 600,
             margin: '1rem auto 0'
           }}>
-            Interested in discussing industrial automation, OT security, or potential collaborations? 
-            I'd love to hear from you.
+            If your plant needs stable OT networking, cyber‑aligned governance or effective recovery
+            strategies, reach out to discuss how we can de‑risk your operations.
           </p>
         </motion.div>
 

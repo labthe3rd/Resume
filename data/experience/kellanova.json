@@ -1,14 +1,14 @@
 {
   "company": "Kellanova | Kellogg",
-  "role": "Controls Engineer & OT Specialist",
+  "role": "Controls Engineer & OT Network Manager",
   "period": "Dec 2023 - Present",
   "location": "Grand Rapids, MI",
-  "description": "Managed controls infrastructure on OT Network. Designed and executed equipment upgrades and installs during plant downtime.",
+  "description": "OT escalation lead for network and automation incidents; architected and enforced cyber‑aligned governance across brownfield OT networks; ensured deterministic CIP Sync/PTP timing and high‑availability Rockwell platforms; led disaster recovery standardization.",
   "highlights": [
-    "OT Network Infrastructure Management",
-    "Equipment Upgrades & Installations",
-    "Plant Downtime Optimization",
-    "System Documentation & Recovery"
+    "Brownfield OT network stabilization",
+    "Cyber‑aligned governance & segmentation",
+    "Deterministic CIP Sync/PTP recovery",
+    "High‑availability Rockwell platforms & disaster recovery"
   ],
   "color": "#00d4ff"
 }

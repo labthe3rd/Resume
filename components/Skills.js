@@ -54,9 +54,9 @@ export default function Skills() {
           transition={{ duration: 0.8 }}
           style={{ marginBottom: '4rem' }}
         >
-          <span className="section-subtitle">Expertise</span>
+          <span className="section-subtitle">Capabilities</span>
           <h2 className="section-title">
-            Technical <span className="gradient-text">Skillset</span>
+            Architecture & <span className="gradient-text">Governance</span>
           </h2>
         </motion.div>
 

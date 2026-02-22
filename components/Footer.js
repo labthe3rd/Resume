@@ -1,3 +1,7 @@
+// file: Footer.js (modified)
+// This footer update aligns the tagline with the narrative of stabilizing OT networks
+// and high‑availability controls architectures.
+
 'use client'
 
 import { motion } from 'framer-motion'
@@ -44,11 +48,10 @@ export default function Footer() {
 
           <p style={{
             color: 'var(--text-tertiary)',
-            maxWidth: 400,
+            maxWidth: 500,
             lineHeight: 1.6
           }}>
-            Controls Engineer & OT Expert specializing in industrial automation, 
-            PLC programming, and operational technology security.
+            OT Infrastructure & Controls Architect specializing in brownfield network stabilization, cyber‑aligned governance, high‑availability Rockwell platforms and measured risk reduction.
           </p>
 
           <div style={{
