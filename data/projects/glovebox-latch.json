@@ -21,8 +21,8 @@
   "valueEstimate": {
     "unit": "total",
     "label": "Impact",
-    "usdLow": 550000,
-    "usdHigh": 550000,
-    "note": null
+    "usdLow": 200000,
+    "usdHigh": 200000,
+    "note": "Estimated project impact (~$200k)."
   }
 }

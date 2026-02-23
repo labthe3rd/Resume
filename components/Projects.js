@@ -4,7 +4,8 @@
 import { motion } from 'framer-motion'
 import { useInView } from 'framer-motion'
 import { useRef, useState, useEffect } from 'react'
-import { Clock, DollarSign, Shield, Cpu, Bot, Wrench, Zap, Eye, Castle } from 'lucide-react'
+import { Clock, DollarSign, Shield, Cpu, Bot, Wrench, Zap, Eye, Castle, Droplet, Network } from 'lucide-react'
+import Link from 'next/link'
 
 const iconMap = {
   Clock,
@@ -91,10 +92,13 @@ export default function Projects() {
     fetch('/api/projects')
       .then(res => res.json())
       .then(data => {
-        const projectsWithIcons = (data.projects || []).map(project => ({
-          ...project,
-          icon: iconMap[project.iconName] || Clock
-        })).sort(sortProjectsByYearDesc)
+        // Normalize project data: assign icons; preserve project-defined colors for visual variety
+        const projectsWithIcons = (data.projects || [])
+          .map(project => ({
+            ...project,
+            icon: iconMap[project.iconName] || Clock
+          }))
+          .sort(sortProjectsByYearDesc)
         setProjects(projectsWithIcons)
         setProjectCategories(data.categories)
         setLoading(false)
@@ -116,8 +120,8 @@ export default function Projects() {
       style={{
         padding: '8rem 2rem',
         position: 'relative',
-        /* subtle background tint using the primary accent color for cohesion */
-        background: 'linear-gradient(180deg, transparent 0%, rgba(37, 99, 235, 0.05) 50%, transparent 100%)'
+        /* apply only a very subtle tint behind projects to reduce monotony without drawing attention */
+        background: 'linear-gradient(180deg, transparent 0%, rgba(59, 130, 246, 0.02) 50%, transparent 100%)'
       }}
     >
       <div className="container">
@@ -181,6 +185,11 @@ export default function Projects() {
             style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(350px, 1fr))' }}
           >
             {filteredProjects.map((project, index) => {
+              // Determine if this card should span multiple columns. Cards with higher budgets
+              // and a periodic cadence will span 2 columns on desktop to break monotony.
+              const highValue = project?.valueEstimate?.usdHigh >= 250000
+              const isLarge = highValue || index % 7 === 0
+
               const youtubeEmbedUrl = toYouTubeEmbedUrl(project.youtubeUrl ?? project.youtube ?? project.videoUrl ?? project.video)
 
               return (
@@ -196,7 +205,8 @@ export default function Projects() {
                   padding: '2rem',
                   position: 'relative',
                   overflow: 'hidden',
-                  cursor: 'pointer'
+                  cursor: 'pointer',
+                  gridColumn: isLarge ? 'span 2' : undefined
                 }}
                 onClick={() => setExpandedProject(expandedProject === project.title ? null : project.title)}
               >
@@ -225,8 +235,8 @@ export default function Projects() {
                     <project.icon size={24} style={{ color: project.color }} />
                   </div>
 
-                  {/* Display a numeric value range when available via valueEstimate; fall back to monetaryValue */}
-                  {(project.valueEstimate && typeof project.valueEstimate.usdLow === 'number' && typeof project.valueEstimate.usdHigh === 'number') ? (
+                  {/* Display a single estimated value when valueEstimate is provided. */}
+                  {(project.valueEstimate && (typeof project.valueEstimate.usdLow === 'number' || typeof project.valueEstimate.usdHigh === 'number')) ? (
                     <div style={{
                       display: 'flex',
                       alignItems: 'center',
@@ -242,9 +252,11 @@ export default function Projects() {
                       <DollarSign size={14} />
                       {(() => {
                         const fmt = (n) => n.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ',');
-                        const low = fmt(project.valueEstimate.usdLow);
-                        const high = fmt(project.valueEstimate.usdHigh);
-                        return `$${low}–$${high}`;
+                        // Prefer the high estimate if available, otherwise fall back to low estimate.
+                        const value = typeof project.valueEstimate.usdHigh === 'number'
+                          ? project.valueEstimate.usdHigh
+                          : project.valueEstimate.usdLow;
+                        return `$${fmt(value)}`;
                       })()} {project.valueEstimate.label || project.monetaryWord || 'Scale'}
                     </div>
                   ) : (
@@ -414,6 +426,203 @@ export default function Projects() {
             )
             })}
           </motion.div>
+        )}
+
+        {/* Labs call‑out: highlight experimental demos without dominating the page */}
+        {!loading && (
+          <div style={{ marginTop: '5rem' }}>
+            <motion.div
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.8 }}
+              style={{ marginBottom: '2rem', textAlign: 'center' }}
+            >
+              <h3 style={{
+                fontFamily: 'Syne, sans-serif',
+                fontSize: '1.75rem',
+                fontWeight: 700,
+                marginBottom: '0.5rem',
+                color: 'var(--text-primary)'
+              }}>
+                Labs &amp; Demos
+              </h3>
+              <p style={{ maxWidth: '700px', margin: '0 auto', lineHeight: 1.5 }}>
+                Explore experimental prototypes that showcase AI‑driven controls, anomaly detection and
+                secure networking. These explorations complement the outcomes above and live in a
+                separate space so the main narrative stays focused.
+              </p>
+            </motion.div>
+
+            <div
+              style={{
+                display: 'grid',
+                gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))',
+                gap: '1.5rem'
+              }}
+            >
+              {/* Control Demo card */}
+              <div
+                className='glass-card'
+                style={{
+                  padding: '1.5rem',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  justifyContent: 'space-between',
+                  gap: '1rem'
+                }}
+              >
+                <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
+                  <div style={{
+                    width: 40,
+                    height: 40,
+                    borderRadius: 10,
+                    background: 'var(--glass-bg)',
+                    border: '1px solid var(--glass-border)',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center'
+                  }}>
+                    <Cpu size={20} style={{ color: 'var(--accent-primary)' }} />
+                  </div>
+                  <h4 style={{
+                    fontFamily: 'Syne, sans-serif',
+                    fontSize: '1.1rem',
+                    fontWeight: 700,
+                    margin: 0,
+                    color: 'var(--text-primary)'
+                  }}>
+                    AI PID Control
+                  </h4>
+                </div>
+                <p style={{ flex: 1, fontSize: '0.85rem', lineHeight: 1.4 }}>
+                  How a private LLM tunes PID gains on a simulated thermal process in real time.
+                </p>
+                <Link
+                  href='/control'
+                  style={{
+                    alignSelf: 'flex-start',
+                    padding: '0.5rem 1rem',
+                    background: 'var(--gradient-1)',
+                    color: 'var(--bg-primary)',
+                    borderRadius: '8px',
+                    fontSize: '0.75rem',
+                    fontWeight: 500,
+                    textDecoration: 'none'
+                  }}
+                >
+                  Read &amp; Try →
+                </Link>
+              </div>
+
+              {/* Tank Demo card */}
+              <div
+                className='glass-card'
+                style={{
+                  padding: '1.5rem',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  justifyContent: 'space-between',
+                  gap: '1rem'
+                }}
+              >
+                <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
+                  <div style={{
+                    width: 40,
+                    height: 40,
+                    borderRadius: 10,
+                    background: 'var(--glass-bg)',
+                    border: '1px solid var(--glass-border)',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center'
+                  }}>
+                    <Droplet size={20} style={{ color: 'var(--accent-primary)' }} />
+                  </div>
+                  <h4 style={{
+                    fontFamily: 'Syne, sans-serif',
+                    fontSize: '1.1rem',
+                    fontWeight: 700,
+                    margin: 0,
+                    color: 'var(--text-primary)'
+                  }}>
+                    Liquid Tank Monitor
+                  </h4>
+                </div>
+                <p style={{ flex: 1, fontSize: '0.85rem', lineHeight: 1.4 }}>
+                  Building a digital twin of a storage tank with anomaly detection and escalation.
+                </p>
+                <Link
+                  href='/tank-monitor'
+                  style={{
+                    alignSelf: 'flex-start',
+                    padding: '0.5rem 1rem',
+                    background: 'var(--gradient-1)',
+                    color: 'var(--bg-primary)',
+                    borderRadius: '8px',
+                    fontSize: '0.75rem',
+                    fontWeight: 500,
+                    textDecoration: 'none'
+                  }}
+                >
+                  Read &amp; Try →
+                </Link>
+              </div>
+
+              {/* Network Map card */}
+              <div
+                className='glass-card'
+                style={{
+                  padding: '1.5rem',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  justifyContent: 'space-between',
+                  gap: '1rem'
+                }}
+              >
+                <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
+                  <div style={{
+                    width: 40,
+                    height: 40,
+                    borderRadius: 10,
+                    background: 'var(--glass-bg)',
+                    border: '1px solid var(--glass-border)',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center'
+                  }}>
+                    <Network size={20} style={{ color: 'var(--accent-primary)' }} />
+                  </div>
+                  <h4 style={{
+                    fontFamily: 'Syne, sans-serif',
+                    fontSize: '1.1rem',
+                    fontWeight: 700,
+                    margin: 0,
+                    color: 'var(--text-primary)'
+                  }}>
+                    Network Architecture
+                  </h4>
+                </div>
+                <p style={{ flex: 1, fontSize: '0.85rem', lineHeight: 1.4 }}>
+                  Securing the connection between a public web app and a private OT lab with VPN and containers.
+                </p>
+                <Link
+                  href='/network-map'
+                  style={{
+                    alignSelf: 'flex-start',
+                    padding: '0.5rem 1rem',
+                    background: 'var(--gradient-1)',
+                    color: 'var(--bg-primary)',
+                    borderRadius: '8px',
+                    fontSize: '0.75rem',
+                    fontWeight: 500,
+                    textDecoration: 'none'
+                  }}
+                >
+                  Read &amp; Explore →
+                </Link>
+              </div>
+            </div>
+          </div>
         )}
       </div>
     </section>

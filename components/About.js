@@ -5,10 +5,12 @@ import { useInView } from 'framer-motion'
 import { useRef } from 'react'
 import { GraduationCap, MapPin, Briefcase, Code } from 'lucide-react'
 
+// Statistics summarising the breadth of my experience. Updated to reflect the
+// number of projects delivered rather than a fixed "Major Impact" count.
 const stats = [
   { value: '10+', label: 'Years in OT & Controls', icon: Briefcase },
   { value: 'BSEE', label: 'Michigan Tech', icon: GraduationCap },
-  { value: '4', label: 'Major Impact Projects', icon: MapPin },
+  { value: '40+', label: 'Projects Delivered', icon: MapPin },
   { value: '20+', label: 'Protocols & Platforms', icon: Code },
 ]
 
@@ -114,7 +116,7 @@ export default function About() {
                 <stat.icon
                   size={28}
                   style={{
-                    color: 'var(--accent-cyan)',
+                    color: 'var(--accent-primary)',
                     marginBottom: '1rem'
                   }}
                 />

@@ -21,8 +21,8 @@
   "valueEstimate": {
     "unit": "total",
     "label": "Cost Avoidance",
-    "usdLow": 50000,
-    "usdHigh": 50000,
-    "note": null
+    "usdLow": 70000,
+    "usdHigh": 70000,
+    "note": "Estimated project scale (~$70k)."
   }
 }

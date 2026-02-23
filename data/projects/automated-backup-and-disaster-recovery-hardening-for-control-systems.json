@@ -21,8 +21,8 @@
   "valueEstimate": {
     "unit": "total",
     "label": "Risk Reduction",
-    "usdLow": 100000,
-    "usdHigh": 100000,
-    "note": null
+    "usdLow": 200000,
+    "usdHigh": 200000,
+    "note": "Estimated risk reduction (~$200k)."
   }
 }

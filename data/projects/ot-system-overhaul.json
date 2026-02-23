@@ -22,8 +22,8 @@
   "valueEstimate": {
     "unit": "total",
     "label": "Savings",
-    "usdLow": 150000,
-    "usdHigh": 150000,
-    "note": null
+    "usdLow": 400000,
+    "usdHigh": 400000,
+    "note": "Estimated savings (~$400k)."
   }
 }

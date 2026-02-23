@@ -24,8 +24,8 @@
   "valueEstimate": {
     "unit": "total",
     "label": "Project Scale",
-    "usdLow": 100000,
-    "usdHigh": 999999,
-    "note": "Derived from '6-figure+' label (100,000–999,999)."
+    "usdLow": 260000,
+    "usdHigh": 260000,
+    "note": "Estimated project scale (~$260k)."
   }
 }

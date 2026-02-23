@@ -21,8 +21,8 @@
   "valueEstimate": {
     "unit": "total",
     "label": "Savings",
-    "usdLow": 270000,
-    "usdHigh": 270000,
-    "note": null
+    "usdLow": 350000,
+    "usdHigh": 350000,
+    "note": "Estimated cost avoidance (~$350k)."
   }
 }

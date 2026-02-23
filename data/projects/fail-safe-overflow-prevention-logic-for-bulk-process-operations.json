@@ -21,8 +21,8 @@
   "valueEstimate": {
     "unit": "total",
     "label": "Waste Avoidance",
-    "usdLow": 120000,
-    "usdHigh": 120000,
-    "note": null
+    "usdLow": 130000,
+    "usdHigh": 130000,
+    "note": "Estimated waste avoidance (~$130k)."
   }
 }

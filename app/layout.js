@@ -23,10 +23,7 @@ export default function RootLayout({ children }) {
   return (
     <html lang="en">
       <body>
-        <div className="noise-overlay" />
-        <div className="gradient-blob blob-1" />
-        <div className="gradient-blob blob-2" />
-        <div className="gradient-blob blob-3" />
+        {/* Removed the noise overlay and gradient blobs for a cleaner, more professional background */}
         <Providers>{children}</Providers>
       </body>
     </html>

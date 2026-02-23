@@ -21,8 +21,8 @@
   "valueEstimate": {
     "unit": "total",
     "label": "Project",
-    "usdLow": 400000,
-    "usdHigh": 400000,
-    "note": null
+    "usdLow": 320000,
+    "usdHigh": 320000,
+    "note": "Estimated project budget (~$320k)."
   }
 }
